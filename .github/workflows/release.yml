@@ -342,7 +342,7 @@ jobs:
             if latest=$(npm view "$name" version 2>/dev/null); then
               echo "$name exists on npm (latest $latest)"
             else
-              echo "::warning::$name is not on npm yet; publish its 0.0.0 placeholder and add the trusted publisher"
+              echo "::warning::$name is not on npm yet; its first publish needs the NPM_TOKEN secret (bindings/node/README.md)"
             fi
           done
 
@@ -400,9 +400,10 @@ jobs:
   #   repo:        ethereum/lean-pq-bindings
   #   workflow:    release.yml
   #   environment: npm          (must match `environment.name` below)
-  # npm can only attach a trusted publisher to a package that already exists; see
-  # bindings/node/README.md for the one-time bootstrap. Already-published versions are skipped,
-  # so a failed run can be re-dispatched on the same tag.
+  # npm can only attach a trusted publisher to a package that already exists, so the first publish
+  # of each package uses an NPM_TOKEN secret; see bindings/node/README.md. npm tries trusted
+  # publishing first and falls back to the token. Already-published versions are skipped, so a
+  # failed run can be re-dispatched on the same tag.
   node-publish:
     name: Publish to npm
     needs: [node-package, node-test]
@@ -413,17 +414,23 @@ jobs:
       url: https://www.npmjs.com/package/@kevaundray/lean-pq
     permissions:
       id-token: write
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: node-packages
           path: dist
       # Trusted publishing needs npm 11.5.1+, which Node.js 24 ships. No registry-url: npm
-      # exchanges the OIDC token itself, and setup-node's placeholder token would only get in the way.
+      # exchanges the OIDC token itself, and setup-node's empty token would only get in the way.
       - uses: actions/setup-node@v5
         with:
           node-version: "24"
           package-manager-cache: false
+      # Only write the token when the secret exists: an empty token breaks trusted publishing.
+      - name: Configure the bootstrap token
+        if: env.NPM_TOKEN != ''
+        run: npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
       - name: Publish platform packages, then the root package
         run: |
           version=${RELEASE_TAG#v}

@@ -122,26 +122,23 @@ sh scripts/install-check.sh "$pack/kevaundray-lean-pq-0.0.0-dev.tgz" \
 
 ### One-time npm setup
 
-npm can attach a trusted publisher only to a package that already exists, so trusted publishing
-cannot make the first publish of a new package. A maintainer bootstraps each package once:
+npm can attach a trusted publisher only to a package that already exists, so the first release
+publishes the seven packages with a short-lived token, and later releases use trusted publishing:
 
-1. Publish from an npm account that owns the `@kevaundray` scope, with two-factor authentication
-   enabled.
-2. Publish a `0.0.0` placeholder for all seven package names, so every real version is published
-   from CI with provenance:
+1. From the npm account that owns the `@kevaundray` scope, create a **granular access token** on
+   npmjs.com (**Access Tokens → Generate New Token → Granular Access Token**) with read and write
+   access to packages, a short expiry such as 7 days, and no other permissions. If your account
+   requires two-factor authentication for publishing, allow the token to bypass it; CI cannot
+   answer a 2FA prompt.
+2. Store it as a repository secret:
 
    ```sh
-   for name in @kevaundray/lean-pq @kevaundray/lean-pq-linux-x64-gnu @kevaundray/lean-pq-linux-arm64-gnu \
-       @kevaundray/lean-pq-linux-x64-musl @kevaundray/lean-pq-linux-arm64-musl \
-       @kevaundray/lean-pq-darwin-x64 @kevaundray/lean-pq-darwin-arm64; do
-     dir=$(mktemp -d)
-     printf '{"name":"%s","version":"0.0.0","description":"Placeholder for the first CI release of %s","license":"MIT","repository":{"type":"git","url":"git+https://github.com/ethereum/lean-pq-bindings.git","directory":"bindings/node"}}\n' \
-       "$name" "$name" > "$dir/package.json"
-     (cd "$dir" && npm publish --access public)
-   done
+   gh secret set NPM_TOKEN -R ethereum/lean-pq-bindings
    ```
 
-3. Add a trusted publisher to each of the seven packages, on npmjs.com under the package's
+3. Cut a release. `node-publish` tries trusted publishing first, falls back to the token, and
+   publishes `@kevaundray/lean-pq` and the six platform packages with provenance.
+4. Add a trusted publisher to each of the seven packages, on npmjs.com under the package's
    **Settings → Trusted publishing**, or with npm 11.15 or later:
 
    ```sh
@@ -149,9 +146,11 @@ cannot make the first publish of a new package. A maintainer bootstraps each pac
    ```
 
    The fields are repository `ethereum/lean-pq-bindings`, workflow `release.yml`, environment
-   `npm`, with `npm publish` allowed. A new trusted publisher expires unless it completes a publish
-   within two days, so add them shortly before a release tag, or re-dispatch the latest tag
-   afterwards.
-4. After the first CI release, set each package's **Settings → Publishing access** to "Require
-   two-factor authentication and disallow tokens", and deprecate the placeholders with
-   `npm deprecate <package>@0.0.0 "placeholder"`.
+   `npm`, with `npm publish` allowed.
+5. Delete the secret and revoke the token, then set each package's **Settings → Publishing
+   access** to "Require two-factor authentication and disallow tokens":
+
+   ```sh
+   gh secret delete NPM_TOKEN -R ethereum/lean-pq-bindings
+   ```
+
