@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.0](https://github.com/ethereum/lean-pq-bindings/compare/v0.4.0...v0.6.0) (2026-10-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* the Claim/slot, Signature, MultiClaimProof, and merge APIs are replaced by leanXMSS/leanSPHINCS secret keys, byte signatures, and Aggregate. The PyPI package is now py-lean-pq.
+* replace Python bindings with safe facade ([#10](https://github.com/ethereum/lean-pq-bindings/issues/10))
+
+### Features
+
+* add Java 25 bindings ([#12](https://github.com/ethereum/lean-pq-bindings/issues/12)) ([3690a76](https://github.com/ethereum/lean-pq-bindings/commit/3690a7628c0148f61419c4f3de189880e6f356f7))
+* rename to lean-pq and port bindings to upstream leanVM ([c7edcc4](https://github.com/ethereum/lean-pq-bindings/commit/c7edcc46a55d4525c862f6eba89d76c6f4726fcb))
+* replace Python bindings with safe facade ([#10](https://github.com/ethereum/lean-pq-bindings/issues/10)) ([4a0f276](https://github.com/ethereum/lean-pq-bindings/commit/4a0f27634d94633a756fac7639a67a4e353df31b))
+
 ## [0.4.0](https://github.com/ethereum/py-lean-multisig/compare/v0.3.0...v0.4.0) (2026-05-08)
 
 
