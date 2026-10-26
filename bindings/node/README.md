@@ -125,8 +125,8 @@ sh scripts/install-check.sh "$pack/kevaundray-lean-pq-0.0.0-dev.tgz" \
 npm can attach a trusted publisher only to a package that already exists, so trusted publishing
 cannot make the first publish of a new package. A maintainer bootstraps each package once:
 
-1. Make sure the `ethereum` npm organization exists, that you can publish to it, and that your
-   account has two-factor authentication enabled.
+1. Publish from an npm account that owns the `@kevaundray` scope, with two-factor authentication
+   enabled.
 2. Publish a `0.0.0` placeholder for all seven package names, so every real version is published
    from CI with provenance:
 
