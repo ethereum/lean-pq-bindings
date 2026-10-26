@@ -574,12 +574,16 @@ jobs:
           mkdir -m 700 "$GNUPGHOME"
           key=$(gpg --list-packets "$dir/lean-pq-$version.jar.asc" | sed -n 's/.*keyid \([0-9A-F]\{16\}\).*/\1/p' | head -n 1)
           test -n "$key"
-          for server in hkps://keys.openpgp.org hkps://keyserver.ubuntu.com; do
-            gpg --keyserver "$server" --recv-keys "$key" || true
-            if gpg --list-keys "$key" >/dev/null 2>&1; then
-              echo "public key $key found on $server"
-              break
-            fi
+          # keyserver.ubuntu.com balances across backends that sync with a delay, so retry each server.
+          for attempt in 1 2 3 4 5; do
+            for server in hkps://keys.openpgp.org hkps://keyserver.ubuntu.com; do
+              gpg --keyserver "$server" --recv-keys "$key" || true
+              if gpg --list-keys "$key" >/dev/null 2>&1; then
+                echo "public key $key found on $server (attempt $attempt)"
+                break 2
+              fi
+            done
+            sleep 5
           done
           if ! gpg --list-keys "$key" >/dev/null 2>&1; then
             echo "::error::public key $key with a user ID is on neither keys.openpgp.org nor keyserver.ubuntu.com; confirm the keys.openpgp.org verification email, or run: gpg --keyserver hkps://keyserver.ubuntu.com --send-keys $key"
