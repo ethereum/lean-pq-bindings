@@ -558,7 +558,7 @@ jobs:
             echo "::error::io.github.crate-crypto:lean-pq:${RELEASE_TAG#v} is already on Maven Central"
             exit 1
           fi
-      - name: Sign with the release key and verify against keys.openpgp.org
+      - name: Sign with the release key and verify against a public keyserver
         env:
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
@@ -568,12 +568,23 @@ jobs:
           gradle -p bindings/java publishToMavenLocal -Dmaven.repo.local="$repo" -Pversion="$version" -PleanPqNativeDir="$PWD/native"
           dir="$repo/io/github/crate-crypto/lean-pq/$version"
           ls -l "$dir"
-          # Central verifies signatures with the public key it finds on a keyserver.
+          # Central verifies signatures with the public key it finds on a keyserver, and a key without
+          # a user ID (keys.openpgp.org strips it until the address is confirmed) cannot be imported.
           export GNUPGHOME="$RUNNER_TEMP/gnupg"
           mkdir -m 700 "$GNUPGHOME"
           key=$(gpg --list-packets "$dir/lean-pq-$version.jar.asc" | sed -n 's/.*keyid \([0-9A-F]\{16\}\).*/\1/p' | head -n 1)
           test -n "$key"
-          gpg --keyserver hkps://keys.openpgp.org --recv-keys "$key"
+          for server in hkps://keys.openpgp.org hkps://keyserver.ubuntu.com; do
+            gpg --keyserver "$server" --recv-keys "$key" || true
+            if gpg --list-keys "$key" >/dev/null 2>&1; then
+              echo "public key $key found on $server"
+              break
+            fi
+          done
+          if ! gpg --list-keys "$key" >/dev/null 2>&1; then
+            echo "::error::public key $key with a user ID is on neither keys.openpgp.org nor keyserver.ubuntu.com; confirm the keys.openpgp.org verification email, or run: gpg --keyserver hkps://keyserver.ubuntu.com --send-keys $key"
+            exit 1
+          fi
           for file in "$dir"/*.jar "$dir"/*.pom; do
             gpg --verify "$file.asc" "$file"
           done
