@@ -11,6 +11,7 @@
   "packages": {
     "bindings/python": {
       "package-name": "py-lean-pq",
+      "release-as": "0.6.0",
       "changelog-path": "CHANGELOG.md"
     }
   }
