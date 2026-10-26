@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/ethereum/lean-pq-bindings/compare/v0.6.0...v0.6.1) (2026-10-26)
+
+
+### Miscellaneous Chores
+
+* **python:** link the changelog from the PyPI page ([9534b44](https://github.com/ethereum/lean-pq-bindings/commit/9534b447de26e14114a4dc6cb6250adac3a2a634))
+
 ## [0.6.0](https://github.com/ethereum/lean-pq-bindings/compare/v0.4.0...v0.6.0) (2026-10-26)
 
 
