@@ -1,3 +1,3 @@
-# `@ethereum/lean-pq-darwin-arm64`
+# `@kevaundray/lean-pq-darwin-arm64`
 
-This is the **aarch64-apple-darwin** binary for `@ethereum/lean-pq`
+This is the **aarch64-apple-darwin** binary for `@kevaundray/lean-pq`

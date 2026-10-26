@@ -143,7 +143,7 @@ jobs:
           cp lean_pq_node.linux-x64-gnu.node npm/linux-x64-gnu/
           npm pack --ignore-scripts --pack-destination "$pack"
           npm pack --ignore-scripts --pack-destination "$pack" ./npm/linux-x64-gnu
-          sh scripts/install-check.sh "$pack/ethereum-lean-pq-0.0.0-dev.tgz" "$pack/ethereum-lean-pq-linux-x64-gnu-0.0.0-dev.tgz"
+          sh scripts/install-check.sh "$pack/kevaundray-lean-pq-0.0.0-dev.tgz" "$pack/kevaundray-lean-pq-linux-x64-gnu-0.0.0-dev.tgz"
         working-directory: bindings/node
 
   zig:

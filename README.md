@@ -26,7 +26,7 @@ The release workflow also publishes the Node.js package to npm, with prebuilt bi
 x64/arm64 (glibc and musl) and macOS x64/arm64:
 
 ```sh
-npm install @ethereum/lean-pq
+npm install @kevaundray/lean-pq
 ```
 
 Rust applications can consume the safe facade directly from this repository:
@@ -63,7 +63,7 @@ cd lean-pq-bindings
 | Binding | Upstream integration | Prerequisites |
 | --- | --- | --- |
 | [Java 25](bindings/java/README.md) | Depend on `io.github.crate-crypto:lean-pq` (see above), or run `gradle -p bindings/java test` for a local build. | JDK 25; Gradle 9.1+ and Rust for source builds |
-| [Node.js](bindings/node/README.md) | Run `npm install @ethereum/lean-pq`, or `npm ci && npm run build` in `bindings/node` for a local build. | Node.js 18.17+; Rust for source builds |
+| [Node.js](bindings/node/README.md) | Run `npm install @kevaundray/lean-pq`, or `npm ci && npm run build` in `bindings/node` for a local build. | Node.js 18.17+; Rust for source builds |
 | [Go](bindings/go/README.md) | Stage the target-specific Rust archive, then use the local Go module. | Go 1.24+, cgo, Zig, `cargo-zigbuild` |
 | [Zig](bindings/zig/README.md) | Use the release package above, or stage the target-specific Rust archive and invoke `zig build … -Dnative-dir=…`. | Zig 0.16+; `cargo-zigbuild` for source builds |
 

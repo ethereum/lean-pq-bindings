@@ -1,3 +1,3 @@
-# `@ethereum/lean-pq-linux-x64-gnu`
+# `@kevaundray/lean-pq-linux-x64-gnu`
 
-This is the **x86_64-unknown-linux-gnu** binary for `@ethereum/lean-pq`
+This is the **x86_64-unknown-linux-gnu** binary for `@kevaundray/lean-pq`

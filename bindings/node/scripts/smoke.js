@@ -1,15 +1,15 @@
-// Signs and verifies through an installed @ethereum/lean-pq; `--aggregate` also proves and
+// Signs and verifies through an installed @kevaundray/lean-pq; `--aggregate` also proves and
 // decodes one aggregate. scripts/install-check.sh runs it inside a fresh project.
 const assert = require('node:assert/strict')
 const path = require('node:path')
 
-const lpq = require('@ethereum/lean-pq')
+const lpq = require('@kevaundray/lean-pq')
 
 async function main() {
-  const installed = path.dirname(require.resolve('@ethereum/lean-pq/package.json'))
+  const installed = path.dirname(require.resolve('@kevaundray/lean-pq/package.json'))
   assert.ok(installed.startsWith(path.join(process.cwd(), 'node_modules')), installed)
-  const { version } = require('@ethereum/lean-pq/package.json')
-  console.log(`@ethereum/lean-pq ${version} from ${installed}`)
+  const { version } = require('@kevaundray/lean-pq/package.json')
+  console.log(`@kevaundray/lean-pq ${version} from ${installed}`)
 
   const message = Buffer.alloc(32, 0x42)
   const other = Buffer.alloc(32, 0x43)

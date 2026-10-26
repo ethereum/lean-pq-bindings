@@ -1,5 +1,5 @@
 {
-  "name": "@ethereum/lean-pq-linux-x64-gnu",
+  "name": "@kevaundray/lean-pq-linux-x64-gnu",
   "version": "0.0.0-dev",
   "cpu": [
     "x64"

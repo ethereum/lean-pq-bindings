@@ -16,7 +16,7 @@ decoding return Promises so their native work does not block the JavaScript even
 ## Install
 
 ```sh
-npm install @ethereum/lean-pq
+npm install @kevaundray/lean-pq
 ```
 
 npm installs a prebuilt binary through a per-platform optional dependency, so installing needs
@@ -24,12 +24,12 @@ no Rust toolchain. Prebuilt binaries cover Node.js 18.17 or later on:
 
 | Platform                 | Package                              |
 | ------------------------ | ------------------------------------ |
-| Linux x64, glibc 2.17+   | `@ethereum/lean-pq-linux-x64-gnu`    |
-| Linux arm64, glibc 2.17+ | `@ethereum/lean-pq-linux-arm64-gnu`  |
-| Linux x64, musl          | `@ethereum/lean-pq-linux-x64-musl`   |
-| Linux arm64, musl        | `@ethereum/lean-pq-linux-arm64-musl` |
-| macOS x64                | `@ethereum/lean-pq-darwin-x64`       |
-| macOS arm64              | `@ethereum/lean-pq-darwin-arm64`     |
+| Linux x64, glibc 2.17+   | `@kevaundray/lean-pq-linux-x64-gnu`    |
+| Linux arm64, glibc 2.17+ | `@kevaundray/lean-pq-linux-arm64-gnu`  |
+| Linux x64, musl          | `@kevaundray/lean-pq-linux-x64-musl`   |
+| Linux arm64, musl        | `@kevaundray/lean-pq-linux-arm64-musl` |
+| macOS x64                | `@kevaundray/lean-pq-darwin-x64`       |
+| macOS arm64              | `@kevaundray/lean-pq-darwin-arm64`     |
 
 The x64 binaries require a CPU with AVX2 and PCLMULQDQ. Installing with `--omit=optional` or
 `--no-optional` skips the binary and leaves the package unable to load.
@@ -37,7 +37,7 @@ The x64 binaries require a CPU with AVX2 and PCLMULQDQ. Installing with `--omit=
 ## Sign and verify
 
 ```js
-const lpq = require('@ethereum/lean-pq')
+const lpq = require('@kevaundray/lean-pq')
 
 const message = Buffer.alloc(32, 0x42)
 
@@ -95,7 +95,7 @@ npm test
 
 ## Releasing
 
-Each `vX.Y.Z` release tag publishes `@ethereum/lean-pq` and every platform package at version
+Each `vX.Y.Z` release tag publishes `@kevaundray/lean-pq` and every platform package at version
 `X.Y.Z` from `.github/workflows/release.yml`, independently of the PyPI publish:
 
 1. `node-build` stamps the version and builds one addon per target.
@@ -116,8 +116,8 @@ pack=$(mktemp -d)
 cp lean_pq_node.linux-x64-gnu.node npm/linux-x64-gnu/
 npm pack --ignore-scripts --pack-destination "$pack"
 npm pack --ignore-scripts --pack-destination "$pack" ./npm/linux-x64-gnu
-sh scripts/install-check.sh "$pack/ethereum-lean-pq-0.0.0-dev.tgz" \
-  "$pack/ethereum-lean-pq-linux-x64-gnu-0.0.0-dev.tgz" --aggregate
+sh scripts/install-check.sh "$pack/kevaundray-lean-pq-0.0.0-dev.tgz" \
+  "$pack/kevaundray-lean-pq-linux-x64-gnu-0.0.0-dev.tgz" --aggregate
 ```
 
 ### One-time npm setup
@@ -131,9 +131,9 @@ cannot make the first publish of a new package. A maintainer bootstraps each pac
    from CI with provenance:
 
    ```sh
-   for name in @ethereum/lean-pq @ethereum/lean-pq-linux-x64-gnu @ethereum/lean-pq-linux-arm64-gnu \
-       @ethereum/lean-pq-linux-x64-musl @ethereum/lean-pq-linux-arm64-musl \
-       @ethereum/lean-pq-darwin-x64 @ethereum/lean-pq-darwin-arm64; do
+   for name in @kevaundray/lean-pq @kevaundray/lean-pq-linux-x64-gnu @kevaundray/lean-pq-linux-arm64-gnu \
+       @kevaundray/lean-pq-linux-x64-musl @kevaundray/lean-pq-linux-arm64-musl \
+       @kevaundray/lean-pq-darwin-x64 @kevaundray/lean-pq-darwin-arm64; do
      dir=$(mktemp -d)
      printf '{"name":"%s","version":"0.0.0","description":"Placeholder for the first CI release of %s","license":"MIT","repository":{"type":"git","url":"git+https://github.com/ethereum/lean-pq-bindings.git","directory":"bindings/node"}}\n' \
        "$name" "$name" > "$dir/package.json"

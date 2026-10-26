@@ -325,7 +325,7 @@ jobs:
             for (const target of targets) {
               const name = root.name + "-" + target
               if (root.optionalDependencies[name] !== root.version) throw new Error(name + " missing from optionalDependencies")
-              if (!fs.existsSync("dist/ethereum-lean-pq-" + target + "-" + root.version + ".tgz")) throw new Error(name + " not packed")
+              if (!fs.existsSync("dist/kevaundray-lean-pq-" + target + "-" + root.version + ".tgz")) throw new Error(name + " not packed")
             }
             if (Object.keys(root.optionalDependencies).length !== targets.length) throw new Error("unexpected optionalDependencies")
           '
@@ -378,7 +378,7 @@ jobs:
           CONTAINER: ${{ matrix.platform.container }}
         run: |
           version=${GITHUB_REF_NAME#v}
-          set -- bindings/node/scripts/install-check.sh "dist/ethereum-lean-pq-$version.tgz" "dist/ethereum-lean-pq-$PACKAGE-$version.tgz" --aggregate
+          set -- bindings/node/scripts/install-check.sh "dist/kevaundray-lean-pq-$version.tgz" "dist/kevaundray-lean-pq-$PACKAGE-$version.tgz" --aggregate
           if [ -n "$CONTAINER" ]; then
             docker run --rm -v "$PWD:/w" -w /w "$CONTAINER" sh "$@"
           else
@@ -400,7 +400,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     environment:
       name: npm
-      url: https://www.npmjs.com/package/@ethereum/lean-pq
+      url: https://www.npmjs.com/package/@kevaundray/lean-pq
     permissions:
       id-token: write
     steps:
@@ -418,7 +418,7 @@ jobs:
         run: |
           version=${GITHUB_REF_NAME#v}
           case "$version" in *-*) tag=next ;; *) tag=latest ;; esac
-          root="dist/ethereum-lean-pq-$version.tgz"
+          root="dist/kevaundray-lean-pq-$version.tgz"
           publish() {
             name=$(tar -xzOf "$1" package/package.json | node -p 'JSON.parse(require("fs").readFileSync(0)).name')
             if [ "$(npm view "$name@$version" version 2>/dev/null)" = "$version" ]; then

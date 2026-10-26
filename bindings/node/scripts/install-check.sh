@@ -1,5 +1,5 @@
 #!/bin/sh
-# Installs a packed @ethereum/lean-pq and one packed platform package into a fresh project, then
+# Installs a packed @kevaundray/lean-pq and one packed platform package into a fresh project, then
 # runs scripts/smoke.js against the installed copy. Extra arguments go to smoke.js.
 #
 #   sh scripts/install-check.sh <lean-pq.tgz> <lean-pq-platform.tgz> [--aggregate]

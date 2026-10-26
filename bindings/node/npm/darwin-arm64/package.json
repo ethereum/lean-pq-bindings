@@ -1,5 +1,5 @@
 {
-  "name": "@ethereum/lean-pq-darwin-arm64",
+  "name": "@kevaundray/lean-pq-darwin-arm64",
   "version": "0.0.0-dev",
   "cpu": [
     "arm64"

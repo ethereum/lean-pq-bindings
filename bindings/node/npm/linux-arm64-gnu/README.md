@@ -1,3 +1,3 @@
-# `@ethereum/lean-pq-linux-arm64-gnu`
+# `@kevaundray/lean-pq-linux-arm64-gnu`
 
-This is the **aarch64-unknown-linux-gnu** binary for `@ethereum/lean-pq`
+This is the **aarch64-unknown-linux-gnu** binary for `@kevaundray/lean-pq`
