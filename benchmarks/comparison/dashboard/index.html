@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>LeanVM multisig vs Lighthouse BLS</title>
+  <title>LeanVM leanXMSS vs Lighthouse BLS</title>
   <style>
     :root {
       --background: #f5f7fb;
@@ -221,8 +221,8 @@
 <body>
   <main>
     <header>
-      <h1>LeanVM multisig vs Lighthouse BLS</h1>
-      <p class="subtitle">Current performance of the LeanVM-backed multisignature implementation beside the BLS implementation used by Lighthouse. Each successful run replaces its suite’s previous result.</p>
+      <h1>LeanVM leanXMSS vs Lighthouse BLS</h1>
+      <p class="subtitle">Current performance of leanXMSS signatures and their leanVM proof aggregation beside the BLS implementation used by Lighthouse. Each successful run replaces its suite’s previous result.</p>
     </header>
 
     <section aria-labelledby="fast-title">
@@ -253,15 +253,15 @@
       <dl class="definitions">
         <div>
           <dt>Same-claim aggregation</dt>
-          <dd>Many independent signers sign the same claim: the identical message and slot. LeanVM checks those signatures in the zkVM and produces a proof; Lighthouse combines the BLS signatures into one signature.</dd>
+          <dd>Many independent signers sign the same claim: the identical message. LeanVM checks those signatures in the zkVM and produces a proof; Lighthouse combines the BLS signatures into one signature.</dd>
         </div>
         <div>
           <dt>Same-claim verification</dt>
-          <dd>Checks the LeanVM proof or aggregate BLS signature against that one message and the complete set of signers.</dd>
+          <dd>Decodes and verifies the LeanVM proof, or checks the aggregate BLS signature against that one message and the complete set of signers. The claims a LeanVM proof lists are compared with the expected signers outside the timed region.</dd>
         </div>
         <div>
           <dt>Recursive same-claim aggregation</dt>
-          <dd>Combines 2, 4, 8, or 16 pre-built LeanVM proofs into one new proof. Every child represents 512 different signers of the same claim—the identical message and slot—and signer sets are disjoint between children. Timing excludes creation of the child proofs but includes validating them and producing the new recursive proof.</dd>
+          <dd>Combines 2, 4, 8, or 16 pre-built LeanVM proofs into one new proof. Every child represents 512 different signers of the same claim—the identical message—and signer sets are disjoint between children. Timing excludes creation of the child proofs but includes validating them and producing the new recursive proof.</dd>
         </div>
         <div>
           <dt>Distinct-claim aggregation</dt>
@@ -273,15 +273,15 @@
         </div>
         <div>
           <dt>Mixed-claim aggregation</dt>
-          <dd>Combines 512 signatures covering either 8 claims (64 signers per claim) or 16 claims (32 signers per claim). LeanVM automatically groups equal claims, proves each group, and merges the results into one proof.</dd>
+          <dd>Combines 512 signatures covering either 8 claims (64 signers per claim) or 16 claims (32 signers per claim). LeanVM proves all of them, whatever their messages, in one aggregation call.</dd>
         </div>
         <div>
           <dt>Mixed-claim verification</dt>
-          <dd>Checks one LeanVM proof against every claim and its signer set. For BLS, the benchmark groups the same public keys per claim and verifies one aggregate signature against either 8 or 16 message-and-key groups.</dd>
+          <dd>Decodes and verifies one LeanVM proof listing every signer-and-message claim. For BLS, the benchmark groups the same public keys per claim and verifies one aggregate signature against either 8 or 16 message-and-key groups.</dd>
         </div>
         <div>
           <dt>Independent signature verification</dt>
-          <dd>Checks a set of separate signer-and-message tuples. LeanVM verifies each raw XMSS signature; Lighthouse verifies the equivalent BLS tuples together with its production batch-verification API.</dd>
+          <dd>Checks a set of separate signer-and-message tuples. LeanVM verifies each raw leanXMSS signature; Lighthouse verifies the equivalent BLS tuples together with its production batch-verification API.</dd>
         </div>
         <div>
           <dt>Proof size and signature size</dt>
@@ -289,11 +289,11 @@
         </div>
         <div>
           <dt>Serialized artifact sizes</dt>
-          <dd>Storage or wire-encoding sizes, not in-memory object sizes. The key-generation row uses a LeanVM secret key covering 2<sup>20</sup> signing slots.</dd>
+          <dd>Storage or wire-encoding sizes, not in-memory object sizes. A stored LeanVM key is its 32-byte seed.</dd>
         </div>
         <div>
           <dt>Key creation</dt>
-          <dd>Generates a new LeanVM XMSS key covering 1,048,576 signing slots, or a new Lighthouse BLS secret key. BLS keys do not precompute a slot-lifetime Merkle tree.</dd>
+          <dd>Derives a new leanXMSS key from its seed, or generates a new Lighthouse BLS secret key. A leanXMSS key covers 2<sup>32</sup> leaf indices; key creation builds only its top tree, and each bottom tree is built when the key first signs in it.</dd>
         </div>
         <div>
           <dt>Suite peak RSS</dt>
@@ -303,7 +303,7 @@
     </section>
 
     <footer>
-      Informational shared-runner measurements. <a href="https://github.com/ethereum/lean-multisig-bindings">Source and methodology</a>.
+      Informational shared-runner measurements. <a href="https://github.com/ethereum/lean-pq-bindings">Source and methodology</a>.
     </footer>
   </main>
 
@@ -325,8 +325,8 @@
 
     function operationLabel(workload, inputSize, claimCount) {
       const label = humanLabel(workload);
-      if (workload === "key_creation" && inputSize != null) {
-        return `${label} (LeanVM signing slots = ${Number(inputSize).toLocaleString()})`;
+      if (workload === "key_creation") {
+        return label;
       }
       if (workload.startsWith("mixed_claim_") && inputSize != null && claimCount != null) {
         return `${label} (${Number(inputSize).toLocaleString()} signatures / ${Number(claimCount).toLocaleString()} claims)`;

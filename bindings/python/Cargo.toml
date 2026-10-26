@@ -1,11 +1,11 @@
 [package]
-name = "py-lean-multisig"
+name = "py-lean-pq"
 version = "0.4.0"
 edition = "2021"
 resolver = "2"
 
 [lib]
-name = "py_lean_multisig"
+name = "py_lean_pq"
 crate-type = ["cdylib"]
 
 [dependencies]
@@ -13,4 +13,4 @@ crate-type = ["cdylib"]
 # in pyproject.toml. Keeping it out of the dependency line lets cargo
 # build/check work normally without the extension-module link rules.
 pyo3 = { version = "0.28.3" }
-lean_multisig_api = { workspace = true }
+lean-pq = { workspace = true }

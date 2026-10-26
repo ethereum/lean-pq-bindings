@@ -23,7 +23,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 mkdir -p "$CARGO_TARGET_DIR/$target/release"
-: > "$CARGO_TARGET_DIR/$target/release/liblean_multisig_native.a"
+: > "$CARGO_TARGET_DIR/$target/release/liblean_pq_native.a"
 EOF
 chmod +x "$tmp_dir/bin/cargo"
 
@@ -42,7 +42,7 @@ stage() {
     test "$(sed -n '4p' "$args_file")" = "--release"
     test "$(sed -n '5p' "$args_file")" = "--target"
     test "$(sed -n '6p' "$args_file")" = "$target"
-    test -f "$archive_dir/liblean_multisig_native.a"
+    test -f "$archive_dir/liblean_pq_native.a"
 }
 
 stage x86_64-unknown-linux-gnu

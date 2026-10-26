@@ -118,12 +118,12 @@ jobs:
     # https://pypi.org/manage/account/publishing/  (account-level — used
     # before the project exists on PyPI; flips to project-level after the
     # first successful publish). Configured publisher claims:
-    #   repo:        ethereum/lean-multisig-bindings
+    #   repo:        ethereum/lean-pq-bindings
     #   workflow:    release.yml
     #   environment: pypi          (must match `environment.name` below)
     environment:
       name: pypi
-      url: https://pypi.org/p/py-lean-multisig
+      url: https://pypi.org/p/py-lean-pq
     permissions:
       id-token: write
     if: startsWith(github.ref, 'refs/tags/v')

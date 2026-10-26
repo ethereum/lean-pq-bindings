@@ -1,14 +1,14 @@
 [package]
-name = "lean-multisig"
+name = "lean-pq"
 version = "0.1.0"
 edition = "2021"
 publish = false
-description = "Safe Rust API for leanMultisig"
+description = "Safe Rust API for leanVM's leanXMSS and leanSPHINCS signatures and their aggregation"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/ethereum/lean-multisig-bindings"
+repository = "https://github.com/ethereum/lean-pq-bindings"
 readme = "README.md"
-keywords = ["cryptography", "signature", "xmss", "ethereum"]
+keywords = ["cryptography", "signature", "xmss", "sphincs", "post-quantum"]
 categories = ["cryptography"]
 
 [dependencies]
-lean_multisig_api = { workspace = true }
+leanvm = { workspace = true }

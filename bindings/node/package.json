@@ -1,12 +1,12 @@
 {
-  "name": "@ethereum/lean-multisig",
+  "name": "@ethereum/lean-pq",
   "version": "0.0.0-dev",
-  "description": "Node.js bindings for leanMultisig",
+  "description": "Node.js bindings for leanXMSS and leanSPHINCS post-quantum signatures and their leanVM aggregation",
   "license": "MIT",
   "main": "facade.js",
   "types": "facade.d.ts",
   "napi": {
-    "binaryName": "lean_multisig_node"
+    "binaryName": "lean_pq_node"
   },
   "scripts": {
     "build": "napi build --platform --release",

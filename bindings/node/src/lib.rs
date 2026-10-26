@@ -1,282 +1,174 @@
 use std::sync::Arc;
 
-use lean_multisig_api as api;
+use lean_pq::{sphincs, xmss, Message};
 use napi::bindgen_prelude::{AsyncTask, Buffer, Error, Result, Status, Task};
 use napi::Env;
 use napi_derive::napi;
 
-fn api_error(error: api::Error) -> Error {
+fn api_error(error: lean_pq::Error) -> Error {
     Error::new(Status::GenericFailure, error.to_string())
 }
 
-fn bytes32(bytes: &[u8], name: &str) -> Result<[u8; 32]> {
-    bytes.try_into().map_err(|_| {
-        Error::new(
-            Status::InvalidArg,
-            format!("{name} must be exactly 32 bytes, got {}", bytes.len()),
-        )
-    })
+fn invalid_arg(reason: String) -> Error {
+    Error::new(Status::InvalidArg, reason)
 }
 
-fn public_keys(signers: Vec<Buffer>) -> Result<Vec<api::PublicKey>> {
-    signers
-        .iter()
-        .map(|signer| bytes32(signer, "public key"))
-        .collect()
+fn bytes32(bytes: &[u8], what: &str) -> Result<[u8; 32]> {
+    bytes
+        .try_into()
+        .map_err(|_| invalid_arg(format!("{what} must be 32 bytes, got {}", bytes.len())))
 }
 
-#[napi]
+fn to_message(bytes: &[u8]) -> Result<Message> {
+    bytes32(bytes, "message")
+}
+
+/// JavaScript numbers are doubles; reject anything that is not exactly a `u32` rather than
+/// let it wrap or truncate into a different leaf index.
+fn uint32(value: f64, what: &str) -> Result<u32> {
+    if value.fract() == 0.0 && (0.0..=f64::from(u32::MAX)).contains(&value) {
+        Ok(value as u32)
+    } else {
+        Err(invalid_arg(format!(
+            "{what} must be an integer in [0, {}], got {value}",
+            u32::MAX
+        )))
+    }
+}
+
+/// A `(public key, message)` pair an aggregate attests.
+#[napi(object)]
 pub struct Claim {
-    inner: api::Claim,
+    pub public_key: Buffer,
+    pub message: Buffer,
+}
+
+/// A raw signature to aggregate.
+#[napi(object)]
+pub struct SignedMessage {
+    pub public_key: Buffer,
+    pub message: Buffer,
+    pub signature: Buffer,
+}
+
+struct RawSignedMessage {
+    public_key: Vec<u8>,
+    message: Vec<u8>,
+    signature: Vec<u8>,
+}
+
+impl From<SignedMessage> for RawSignedMessage {
+    fn from(entry: SignedMessage) -> Self {
+        Self {
+            public_key: entry.public_key.to_vec(),
+            message: entry.message.to_vec(),
+            signature: entry.signature.to_vec(),
+        }
+    }
 }
 
 #[napi]
-impl Claim {
-    #[napi(constructor)]
-    pub fn new(message: Buffer, slot: u32) -> Result<Self> {
-        Ok(Self {
-            inner: api::Claim::new(bytes32(&message, "message")?, slot),
-        })
-    }
-
-    #[napi(getter)]
-    pub fn message(&self) -> Buffer {
-        self.inner.message().to_vec().into()
-    }
-
-    #[napi(getter)]
-    pub fn slot(&self) -> u32 {
-        self.inner.slot()
-    }
+pub struct XmssSecretKey {
+    inner: Arc<xmss::SecretKey>,
 }
 
 #[napi]
-pub struct SecretKey {
-    inner: Arc<api::SecretKey>,
-}
-
-#[napi]
-impl SecretKey {
+impl XmssSecretKey {
+    /// SECRET KEY MATERIAL: the seed.
     #[napi]
     pub fn to_bytes(&self) -> Buffer {
-        self.inner.to_bytes().into()
+        self.inner.to_bytes().to_vec().into()
     }
 
     #[napi(getter)]
     pub fn public_key(&self) -> Buffer {
-        self.inner.public_key().to_vec().into()
+        self.inner.public_key().to_bytes().to_vec().into()
     }
 
-    #[napi(getter)]
-    pub fn slot_start(&self) -> u32 {
-        *self.inner.slots().start()
-    }
-
-    #[napi(getter)]
-    pub fn slot_end(&self) -> u32 {
-        *self.inner.slots().end()
-    }
-
-    #[napi]
-    pub fn prepare(&self, slot: u32) -> AsyncTask<PrepareKeyTask> {
-        AsyncTask::new(PrepareKeyTask {
+    #[napi(ts_return_type = "Promise<void>")]
+    pub fn prepare(&self, leaf_index: f64) -> AsyncTask<XmssPrepareTask> {
+        AsyncTask::new(XmssPrepareTask {
             key: self.inner.clone(),
-            slot,
+            leaf_index,
         })
     }
 
-    #[napi]
-    pub fn sign(&self, claim: &Claim) -> AsyncTask<SignTask> {
-        AsyncTask::new(SignTask {
+    #[napi(ts_return_type = "Promise<Buffer>")]
+    pub fn sign(&self, message: Buffer, leaf_index: f64) -> AsyncTask<XmssSignTask> {
+        AsyncTask::new(XmssSignTask {
             key: self.inner.clone(),
-            claim: claim.inner,
+            message: message.to_vec(),
+            leaf_index,
         })
     }
 }
 
 #[napi]
-pub struct Signature {
-    inner: Arc<api::Signature>,
+pub struct SphincsSecretKey {
+    inner: Arc<sphincs::SecretKey>,
 }
 
 #[napi]
-impl Signature {
-    #[napi(factory)]
-    pub fn from_bytes(data: Buffer, claim: &Claim, signers: Vec<Buffer>) -> Result<Self> {
-        Ok(Self {
-            inner: Arc::new(
-                api::Signature::from_bytes(&data, &claim.inner, &public_keys(signers)?)
-                    .map_err(api_error)?,
-            ),
-        })
+impl SphincsSecretKey {
+    /// SECRET KEY MATERIAL: the seed, then the kept height.
+    #[napi]
+    pub fn to_bytes(&self) -> Buffer {
+        self.inner.to_bytes().to_vec().into()
     }
 
+    #[napi(getter)]
+    pub fn public_key(&self) -> Buffer {
+        self.inner.public_key().to_bytes().to_vec().into()
+    }
+
+    #[napi(getter)]
+    pub fn kept_height(&self) -> u32 {
+        self.inner.kept_height() as u32
+    }
+
+    #[napi(ts_return_type = "Promise<Buffer>")]
+    pub fn sign(&self, message: Buffer) -> AsyncTask<SphincsSignTask> {
+        AsyncTask::new(SphincsSignTask {
+            key: self.inner.clone(),
+            message: message.to_vec(),
+        })
+    }
+}
+
+#[napi]
+pub struct Aggregate {
+    inner: Arc<lean_pq::Aggregate>,
+}
+
+#[napi]
+impl Aggregate {
     #[napi]
     pub fn to_bytes(&self) -> Buffer {
         self.inner.to_bytes().into()
     }
 
     #[napi(getter)]
-    pub fn claim(&self) -> Claim {
-        Claim {
-            inner: self.inner.claim(),
-        }
-    }
-}
-
-#[napi]
-pub struct ClaimSigners {
-    inner: api::ClaimSigners,
-}
-
-#[napi]
-impl ClaimSigners {
-    #[napi(constructor)]
-    pub fn new(claim: &Claim, signers: Vec<Buffer>) -> Result<Self> {
-        Ok(Self {
-            inner: api::ClaimSigners {
-                claim: claim.inner,
-                signers: public_keys(signers)?,
-            },
-        })
-    }
-
-    #[napi(getter)]
-    pub fn claim(&self) -> Claim {
-        Claim {
-            inner: self.inner.claim,
-        }
-    }
-
-    #[napi(getter)]
-    pub fn signers(&self) -> Vec<Buffer> {
+    pub fn xmss_claims(&self) -> Vec<Claim> {
         self.inner
-            .signers
-            .iter()
-            .map(|signer| signer.to_vec().into())
+            .xmss_claims()
+            .into_iter()
+            .map(|(key, message)| Claim {
+                public_key: key.to_bytes().to_vec().into(),
+                message: message.to_vec().into(),
+            })
             .collect()
     }
-}
 
-#[napi]
-pub struct MultiClaimProof {
-    inner: Arc<api::MultiClaimProof>,
-}
-
-#[napi]
-impl MultiClaimProof {
-    #[napi(factory)]
-    pub fn from_bytes(data: Buffer, groups: Vec<&ClaimSigners>) -> Result<Self> {
-        let groups = groups
-            .iter()
-            .map(|group| group.inner.clone())
-            .collect::<Vec<_>>();
-        Ok(Self {
-            inner: Arc::new(api::MultiClaimProof::from_bytes(&data, &groups).map_err(api_error)?),
-        })
-    }
-
-    #[napi]
-    pub fn to_bytes(&self) -> Buffer {
-        self.inner.to_bytes().into()
-    }
-}
-
-pub struct GenerateKeyTask {
-    slot_start: u32,
-    slot_end: u32,
-}
-
-impl Task for GenerateKeyTask {
-    type Output = api::SecretKey;
-    type JsValue = SecretKey;
-
-    fn compute(&mut self) -> Result<Self::Output> {
-        api::SecretKey::generate(self.slot_start..=self.slot_end).map_err(api_error)
-    }
-
-    fn resolve(&mut self, _: Env, output: Self::Output) -> Result<Self::JsValue> {
-        Ok(SecretKey {
-            inner: Arc::new(output),
-        })
-    }
-}
-
-pub struct SeedKeyTask {
-    seed: [u8; 32],
-    slot_start: u32,
-    slot_end: u32,
-}
-
-impl Task for SeedKeyTask {
-    type Output = api::SecretKey;
-    type JsValue = SecretKey;
-
-    fn compute(&mut self) -> Result<Self::Output> {
-        api::SecretKey::from_seed(self.seed, self.slot_start..=self.slot_end).map_err(api_error)
-    }
-
-    fn resolve(&mut self, _: Env, output: Self::Output) -> Result<Self::JsValue> {
-        Ok(SecretKey {
-            inner: Arc::new(output),
-        })
-    }
-}
-
-pub struct BytesKeyTask {
-    data: Vec<u8>,
-}
-
-impl Task for BytesKeyTask {
-    type Output = api::SecretKey;
-    type JsValue = SecretKey;
-
-    fn compute(&mut self) -> Result<Self::Output> {
-        api::SecretKey::from_bytes(&self.data).map_err(api_error)
-    }
-
-    fn resolve(&mut self, _: Env, output: Self::Output) -> Result<Self::JsValue> {
-        Ok(SecretKey {
-            inner: Arc::new(output),
-        })
-    }
-}
-
-pub struct PrepareKeyTask {
-    key: Arc<api::SecretKey>,
-    slot: u32,
-}
-
-impl Task for PrepareKeyTask {
-    type Output = ();
-    type JsValue = ();
-
-    fn compute(&mut self) -> Result<Self::Output> {
-        self.key.prepare(self.slot).map_err(api_error)
-    }
-
-    fn resolve(&mut self, _: Env, output: Self::Output) -> Result<Self::JsValue> {
-        Ok(output)
-    }
-}
-
-pub struct SignTask {
-    key: Arc<api::SecretKey>,
-    claim: api::Claim,
-}
-
-impl Task for SignTask {
-    type Output = api::Signature;
-    type JsValue = Signature;
-
-    fn compute(&mut self) -> Result<Self::Output> {
-        self.key.sign(&self.claim).map_err(api_error)
-    }
-
-    fn resolve(&mut self, _: Env, output: Self::Output) -> Result<Self::JsValue> {
-        Ok(Signature {
-            inner: Arc::new(output),
-        })
+    #[napi(getter)]
+    pub fn sphincs_claims(&self) -> Vec<Claim> {
+        self.inner
+            .sphincs_claims()
+            .into_iter()
+            .map(|(key, message)| Claim {
+                public_key: key.to_bytes().to_vec().into(),
+                message: message.to_vec().into(),
+            })
+            .collect()
     }
 }
 
@@ -287,7 +179,7 @@ impl Task for SetupTask {
     type JsValue = ();
 
     fn compute(&mut self) -> Result<Self::Output> {
-        api::setup();
+        lean_pq::setup();
         Ok(())
     }
 
@@ -296,82 +188,48 @@ impl Task for SetupTask {
     }
 }
 
-pub struct AggregateTask {
-    signatures: Vec<api::Signature>,
-    claim: api::Claim,
+pub enum XmssKeySource {
+    Random,
+    Seed(Vec<u8>),
+    Bytes(Vec<u8>),
 }
 
-pub struct VerifiedSignersTask {
-    signature: Arc<api::Signature>,
-    claim: api::Claim,
+pub struct XmssKeyTask {
+    source: XmssKeySource,
 }
 
-impl Task for VerifiedSignersTask {
-    type Output = Vec<api::PublicKey>;
-    type JsValue = Vec<Buffer>;
+impl Task for XmssKeyTask {
+    type Output = xmss::SecretKey;
+    type JsValue = XmssSecretKey;
 
     fn compute(&mut self) -> Result<Self::Output> {
-        api::verified_signers(&self.signature, &self.claim).map_err(api_error)
+        match &self.source {
+            XmssKeySource::Random => Ok(xmss::SecretKey::generate()),
+            XmssKeySource::Seed(seed) => Ok(xmss::SecretKey::from_seed(bytes32(seed, "seed")?)),
+            XmssKeySource::Bytes(bytes) => xmss::SecretKey::from_bytes(bytes).map_err(api_error),
+        }
     }
 
     fn resolve(&mut self, _: Env, output: Self::Output) -> Result<Self::JsValue> {
-        Ok(output
-            .into_iter()
-            .map(|signer| signer.to_vec().into())
-            .collect())
-    }
-}
-
-pub struct MergeClaimsTask {
-    signatures: Vec<api::Signature>,
-}
-
-impl Task for MergeClaimsTask {
-    type Output = api::MultiClaimProof;
-    type JsValue = MultiClaimProof;
-
-    fn compute(&mut self) -> Result<Self::Output> {
-        api::merge_claims(self.signatures.clone()).map_err(api_error)
-    }
-
-    fn resolve(&mut self, _: Env, output: Self::Output) -> Result<Self::JsValue> {
-        Ok(MultiClaimProof {
+        Ok(XmssSecretKey {
             inner: Arc::new(output),
         })
     }
 }
 
-pub struct VerifiedClaimsTask {
-    proof: Arc<api::MultiClaimProof>,
+pub struct XmssPrepareTask {
+    key: Arc<xmss::SecretKey>,
+    leaf_index: f64,
 }
 
-impl Task for VerifiedClaimsTask {
-    type Output = Vec<api::ClaimSigners>;
-    type JsValue = Vec<ClaimSigners>;
-
-    fn compute(&mut self) -> Result<Self::Output> {
-        api::verified_claims(&self.proof).map_err(api_error)
-    }
-
-    fn resolve(&mut self, _: Env, output: Self::Output) -> Result<Self::JsValue> {
-        Ok(output
-            .into_iter()
-            .map(|inner| ClaimSigners { inner })
-            .collect())
-    }
-}
-
-pub struct VerifyClaimsTask {
-    proof: Arc<api::MultiClaimProof>,
-    expected: Vec<api::ClaimSigners>,
-}
-
-impl Task for VerifyClaimsTask {
+impl Task for XmssPrepareTask {
     type Output = ();
     type JsValue = ();
 
     fn compute(&mut self) -> Result<Self::Output> {
-        api::verify_claims(&self.proof, &self.expected).map_err(api_error)
+        self.key
+            .prepare(uint32(self.leaf_index, "leaf index")?)
+            .map_err(api_error)
     }
 
     fn resolve(&mut self, _: Env, output: Self::Output) -> Result<Self::JsValue> {
@@ -379,107 +237,234 @@ impl Task for VerifyClaimsTask {
     }
 }
 
-impl Task for AggregateTask {
-    type Output = api::Signature;
-    type JsValue = Signature;
+pub struct XmssSignTask {
+    key: Arc<xmss::SecretKey>,
+    message: Vec<u8>,
+    leaf_index: f64,
+}
+
+impl Task for XmssSignTask {
+    type Output = Vec<u8>;
+    type JsValue = Buffer;
 
     fn compute(&mut self) -> Result<Self::Output> {
-        api::aggregate(self.signatures.clone(), &self.claim).map_err(api_error)
+        let message = to_message(&self.message)?;
+        let leaf_index = uint32(self.leaf_index, "leaf index")?;
+        let signature = self.key.sign(&message, leaf_index).map_err(api_error)?;
+        Ok(signature.to_bytes().to_vec())
     }
 
     fn resolve(&mut self, _: Env, output: Self::Output) -> Result<Self::JsValue> {
-        Ok(Signature {
+        Ok(output.into())
+    }
+}
+
+pub enum SphincsKeySource {
+    Random(f64),
+    Seed(Vec<u8>, f64),
+    Bytes(Vec<u8>),
+}
+
+pub struct SphincsKeyTask {
+    source: SphincsKeySource,
+}
+
+impl Task for SphincsKeyTask {
+    type Output = sphincs::SecretKey;
+    type JsValue = SphincsSecretKey;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        match &self.source {
+            SphincsKeySource::Random(kept_height) => {
+                sphincs::SecretKey::generate(uint32(*kept_height, "kept height")? as usize)
+                    .map_err(api_error)
+            }
+            SphincsKeySource::Seed(seed, kept_height) => sphincs::SecretKey::from_seed(
+                bytes32(seed, "seed")?,
+                uint32(*kept_height, "kept height")? as usize,
+            )
+            .map_err(api_error),
+            SphincsKeySource::Bytes(bytes) => {
+                sphincs::SecretKey::from_bytes(bytes).map_err(api_error)
+            }
+        }
+    }
+
+    fn resolve(&mut self, _: Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(SphincsSecretKey {
             inner: Arc::new(output),
         })
     }
 }
 
-#[napi]
+pub struct SphincsSignTask {
+    key: Arc<sphincs::SecretKey>,
+    message: Vec<u8>,
+}
+
+impl Task for SphincsSignTask {
+    type Output = Vec<u8>;
+    type JsValue = Buffer;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        let signature = self
+            .key
+            .sign(&to_message(&self.message)?)
+            .map_err(api_error)?;
+        Ok(signature.to_bytes().to_vec())
+    }
+
+    fn resolve(&mut self, _: Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(output.into())
+    }
+}
+
+pub struct AggregateFromBytesTask {
+    data: Vec<u8>,
+}
+
+impl Task for AggregateFromBytesTask {
+    type Output = lean_pq::Aggregate;
+    type JsValue = Aggregate;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        lean_pq::Aggregate::from_bytes(&self.data).map_err(api_error)
+    }
+
+    fn resolve(&mut self, _: Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(Aggregate {
+            inner: Arc::new(output),
+        })
+    }
+}
+
+pub struct AggregateTask {
+    children: Vec<Arc<lean_pq::Aggregate>>,
+    xmss: Vec<RawSignedMessage>,
+    sphincs: Vec<RawSignedMessage>,
+}
+
+impl Task for AggregateTask {
+    type Output = lean_pq::Aggregate;
+    type JsValue = Aggregate;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        let xmss = self
+            .xmss
+            .iter()
+            .map(|entry| {
+                Ok((
+                    xmss::PublicKey::from_bytes(&entry.public_key).map_err(api_error)?,
+                    to_message(&entry.message)?,
+                    xmss::Signature::from_bytes(&entry.signature).map_err(api_error)?,
+                ))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let sphincs = self
+            .sphincs
+            .iter()
+            .map(|entry| {
+                Ok((
+                    sphincs::PublicKey::from_bytes(&entry.public_key).map_err(api_error)?,
+                    to_message(&entry.message)?,
+                    sphincs::Signature::from_bytes(&entry.signature).map_err(api_error)?,
+                ))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let children = self.children.iter().map(Arc::as_ref).collect::<Vec<_>>();
+        lean_pq::aggregate(&children, &xmss, &sphincs).map_err(api_error)
+    }
+
+    fn resolve(&mut self, _: Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(Aggregate {
+            inner: Arc::new(output),
+        })
+    }
+}
+
+#[napi(ts_return_type = "Promise<void>")]
 pub fn setup() -> AsyncTask<SetupTask> {
     AsyncTask::new(SetupTask)
 }
 
-#[napi]
-pub fn generate_secret_key(slot_start: u32, slot_end: u32) -> AsyncTask<GenerateKeyTask> {
-    AsyncTask::new(GenerateKeyTask {
-        slot_start,
-        slot_end,
+#[napi(ts_return_type = "Promise<XmssSecretKey>")]
+pub fn generate_xmss_secret_key() -> AsyncTask<XmssKeyTask> {
+    AsyncTask::new(XmssKeyTask {
+        source: XmssKeySource::Random,
+    })
+}
+
+#[napi(ts_return_type = "Promise<XmssSecretKey>")]
+pub fn xmss_secret_key_from_seed(seed: Buffer) -> AsyncTask<XmssKeyTask> {
+    AsyncTask::new(XmssKeyTask {
+        source: XmssKeySource::Seed(seed.to_vec()),
+    })
+}
+
+#[napi(ts_return_type = "Promise<XmssSecretKey>")]
+pub fn xmss_secret_key_from_bytes(data: Buffer) -> AsyncTask<XmssKeyTask> {
+    AsyncTask::new(XmssKeyTask {
+        source: XmssKeySource::Bytes(data.to_vec()),
     })
 }
 
 #[napi]
-pub fn secret_key_from_seed(
-    seed: Buffer,
-    slot_start: u32,
-    slot_end: u32,
-) -> Result<AsyncTask<SeedKeyTask>> {
-    Ok(AsyncTask::new(SeedKeyTask {
-        seed: bytes32(&seed, "seed")?,
-        slot_start,
-        slot_end,
-    }))
-}
-
-#[napi]
-pub fn secret_key_from_bytes(data: Buffer) -> AsyncTask<BytesKeyTask> {
-    AsyncTask::new(BytesKeyTask {
-        data: data.to_vec(),
-    })
-}
-
-#[napi]
-pub fn aggregate(signatures: Vec<&Signature>, claim: &Claim) -> AsyncTask<AggregateTask> {
-    AsyncTask::new(AggregateTask {
-        signatures: signatures
-            .iter()
-            .map(|signature| (*signature.inner).clone())
-            .collect(),
-        claim: claim.inner,
-    })
-}
-
-#[napi]
-pub fn verified_signers(signature: &Signature, claim: &Claim) -> AsyncTask<VerifiedSignersTask> {
-    AsyncTask::new(VerifiedSignersTask {
-        signature: signature.inner.clone(),
-        claim: claim.inner,
-    })
-}
-
-#[napi]
-pub fn verify(signature: &Signature, expected_signers: Vec<Buffer>, claim: &Claim) -> Result<()> {
-    api::verify(
-        &signature.inner,
-        &public_keys(expected_signers)?,
-        &claim.inner,
+pub fn xmss_verify(public_key: Buffer, message: Buffer, signature: Buffer) -> Result<()> {
+    xmss::verify(
+        &xmss::PublicKey::from_bytes(&public_key).map_err(api_error)?,
+        &to_message(&message)?,
+        &xmss::Signature::from_bytes(&signature).map_err(api_error)?,
     )
     .map_err(api_error)
 }
 
-#[napi]
-pub fn merge_claims(signatures: Vec<&Signature>) -> AsyncTask<MergeClaimsTask> {
-    AsyncTask::new(MergeClaimsTask {
-        signatures: signatures
-            .iter()
-            .map(|signature| (*signature.inner).clone())
-            .collect(),
+#[napi(ts_return_type = "Promise<SphincsSecretKey>")]
+pub fn generate_sphincs_secret_key(kept_height: f64) -> AsyncTask<SphincsKeyTask> {
+    AsyncTask::new(SphincsKeyTask {
+        source: SphincsKeySource::Random(kept_height),
+    })
+}
+
+#[napi(ts_return_type = "Promise<SphincsSecretKey>")]
+pub fn sphincs_secret_key_from_seed(seed: Buffer, kept_height: f64) -> AsyncTask<SphincsKeyTask> {
+    AsyncTask::new(SphincsKeyTask {
+        source: SphincsKeySource::Seed(seed.to_vec(), kept_height),
+    })
+}
+
+#[napi(ts_return_type = "Promise<SphincsSecretKey>")]
+pub fn sphincs_secret_key_from_bytes(data: Buffer) -> AsyncTask<SphincsKeyTask> {
+    AsyncTask::new(SphincsKeyTask {
+        source: SphincsKeySource::Bytes(data.to_vec()),
     })
 }
 
 #[napi]
-pub fn verified_claims(proof: &MultiClaimProof) -> AsyncTask<VerifiedClaimsTask> {
-    AsyncTask::new(VerifiedClaimsTask {
-        proof: proof.inner.clone(),
+pub fn sphincs_verify(public_key: Buffer, message: Buffer, signature: Buffer) -> Result<()> {
+    sphincs::verify(
+        &sphincs::PublicKey::from_bytes(&public_key).map_err(api_error)?,
+        &to_message(&message)?,
+        &sphincs::Signature::from_bytes(&signature).map_err(api_error)?,
+    )
+    .map_err(api_error)
+}
+
+#[napi(ts_return_type = "Promise<Aggregate>")]
+pub fn aggregate_from_bytes(data: Buffer) -> AsyncTask<AggregateFromBytesTask> {
+    AsyncTask::new(AggregateFromBytesTask {
+        data: data.to_vec(),
     })
 }
 
-#[napi]
-pub fn verify_claims(
-    proof: &MultiClaimProof,
-    expected: Vec<&ClaimSigners>,
-) -> AsyncTask<VerifyClaimsTask> {
-    AsyncTask::new(VerifyClaimsTask {
-        proof: proof.inner.clone(),
-        expected: expected.iter().map(|group| group.inner.clone()).collect(),
+#[napi(ts_return_type = "Promise<Aggregate>")]
+pub fn aggregate(
+    children: Vec<&Aggregate>,
+    xmss: Vec<SignedMessage>,
+    sphincs: Vec<SignedMessage>,
+) -> AsyncTask<AggregateTask> {
+    AsyncTask::new(AggregateTask {
+        children: children.iter().map(|child| child.inner.clone()).collect(),
+        xmss: xmss.into_iter().map(RawSignedMessage::from).collect(),
+        sphincs: sphincs.into_iter().map(RawSignedMessage::from).collect(),
     })
 }

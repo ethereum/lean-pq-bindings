@@ -6,13 +6,14 @@ use std::{
 };
 
 use anyhow::{bail, ensure, Context, Result};
-use lean_multisig_comparison::{
-    deterministic_key_material, ensure_distinct_output_paths, BenchmarkReport, ComparisonReport,
-    FixtureSet, RecursiveAggregationReport, RunConfig, SampleSummary, KEY_CREATION_SLOTS,
-    LIGHTHOUSE_REVISION, MAX_DISTINCT_CLAIMS, MIXED_CLAIM_SIGNATURES, RECURSIVE_CHILD_SIGNERS,
+use lean_pq_comparison::{
+    ensure_distinct_output_paths, lean_fixture_signer, lean_full_key_seed, BenchmarkReport,
+    ComparisonReport, FixtureSet, LeanXmssClaim, LeanXmssInput, RecursiveAggregationReport,
+    RunConfig, SampleSummary, KEY_CREATION_WORKLOAD, LIGHTHOUSE_REVISION, MIXED_CLAIM_SIGNATURES,
+    RECURSIVE_CHILD_SIGNERS,
 };
 
-const SEMANTIC_WARNING: &str = "WARNING: leanMultisig aggregation generates zkVM proofs, while Lighthouse BLS aggregation combines elliptic-curve points; these operations do not have identical security semantics.";
+const SEMANTIC_WARNING: &str = "WARNING: leanVM aggregation of leanXMSS signatures generates zkVM proofs, while Lighthouse BLS aggregation combines elliptic-curve points; these operations do not have identical security semantics.";
 const MIN_LIGHTHOUSE_BATCH_DURATION: Duration = Duration::from_millis(10);
 const DISTINCT_CLAIM_VERIFY_WORKLOAD: &str = "distinct_claim_verify_conceptual";
 const DISTINCT_VERIFY_NOTE: &str = "NOTE: distinct_claim_verify_conceptual and mixed_claim_verify_conceptual use Lighthouse aggregate_verify, an EF-test-only non-production path. Mixed-claim BLS verification includes aggregation of each claim's public keys. The fast independent_signatures_verify workload compares production-oriented BLS batch verification with LeanVM verification of the same independent signer-and-message tuples.";
@@ -24,7 +25,7 @@ fn main() -> Result<()> {
 }
 
 fn run(config: RunConfig) -> Result<()> {
-    lean_multisig::setup();
+    lean_pq::setup();
 
     let mixed_capacity = config.mixed_claim_counts.len() * 2;
     let mut comparisons = Vec::with_capacity(
@@ -36,14 +37,15 @@ fn run(config: RunConfig) -> Result<()> {
         let same_claim = FixtureSet::same_claim(size).with_context(|| {
             format!("failed to build same-claim fixtures for input size {size}")
         })?;
-        let same_claim_value = same_claim.lean_claims()[0];
-        let same_claim_signers = same_claim.lean_public_keys().to_vec();
+        let same_claim_inputs = same_claim.lean_inputs();
+        let same_claim_expected = same_claim.lean_expected_claims();
         let same_claim_bls_message = same_claim.bls_messages()[0];
         let same_claim_bls_public_keys = same_claim.bls_public_keys().iter().collect::<Vec<_>>();
 
         let (aggregate_row, lean_aggregate, bls_aggregate) = measure_same_claim_aggregate(
             &same_claim,
-            &same_claim_signers,
+            &same_claim_inputs,
+            &same_claim_expected,
             &same_claim_bls_public_keys,
             config.samples,
             size,
@@ -53,8 +55,7 @@ fn run(config: RunConfig) -> Result<()> {
         comparisons.push(measure_same_claim_verify(
             &lean_aggregate,
             &bls_aggregate,
-            &same_claim_value,
-            &same_claim_signers,
+            &same_claim_expected,
             same_claim_bls_message,
             &same_claim_bls_public_keys,
             config.samples,
@@ -66,20 +67,14 @@ fn run(config: RunConfig) -> Result<()> {
         let distinct_claims = FixtureSet::distinct_claims(size).with_context(|| {
             format!("failed to build distinct-claim fixtures for input size {size}")
         })?;
-        let distinct_expected = distinct_claims
-            .lean_claims()
-            .iter()
-            .zip(distinct_claims.lean_public_keys())
-            .map(|(claim, public_key)| lean_multisig::ClaimSigners {
-                claim: *claim,
-                signers: vec![*public_key],
-            })
-            .collect::<Vec<_>>();
+        let distinct_inputs = distinct_claims.lean_inputs();
+        let distinct_expected = distinct_claims.lean_expected_claims();
         let distinct_bls_messages = distinct_claims.bls_messages().to_vec();
         let distinct_bls_public_keys = distinct_claims.bls_public_keys().iter().collect::<Vec<_>>();
 
         let (aggregate_row, lean_aggregate, bls_aggregate) = measure_distinct_claim_aggregate(
             &distinct_claims,
+            &distinct_inputs,
             &distinct_expected,
             &distinct_bls_messages,
             &distinct_bls_public_keys,
@@ -107,13 +102,15 @@ fn run(config: RunConfig) -> Result<()> {
                     MIXED_CLAIM_SIGNATURES, claim_count
                 )
             })?;
-        let mixed_expected = mixed_claims.lean_claim_groups();
+        let mixed_inputs = mixed_claims.lean_inputs();
+        let mixed_expected = mixed_claims.lean_expected_claims();
         let (mixed_bls_messages, mixed_bls_public_keys) =
             mixed_claims.bls_grouped_claim_context()?;
         let mixed_bls_public_keys = mixed_bls_public_keys.iter().collect::<Vec<_>>();
 
         let (aggregate_row, lean_aggregate, bls_aggregate) = measure_mixed_claim_aggregate(
             &mixed_claims,
+            &mixed_inputs,
             &mixed_expected,
             &mixed_bls_messages,
             &mixed_bls_public_keys,
@@ -161,9 +158,7 @@ fn run(config: RunConfig) -> Result<()> {
 }
 
 fn measure_key_creation(samples: usize) -> Result<ComparisonReport> {
-    const WORKLOAD: &str = "key_creation";
-    let last_slot = u32::try_from(KEY_CREATION_SLOTS - 1)
-        .context("the key-creation slot count must fit in a u32 range")?;
+    const WORKLOAD: &str = KEY_CREATION_WORKLOAD;
     let lighthouse_iterations =
         calibrate_batch_iterations(MIN_LIGHTHOUSE_BATCH_DURATION, |iterations| {
             let (elapsed, key) =
@@ -180,12 +175,11 @@ fn measure_key_creation(samples: usize) -> Result<ComparisonReport> {
     for_each_paired_sample(
         samples,
         |sample| {
-            let start = Instant::now();
-            let key = lean_multisig::SecretKey::generate(0..=last_slot).with_context(|| {
-                format!(
-                    "{WORKLOAD} ({KEY_CREATION_SLOTS} slots, sample {sample}): LeanVM key generation failed"
-                )
+            let seed = lean_full_key_seed(sample).with_context(|| {
+                format!("{WORKLOAD} (sample {sample}): failed to derive the LeanVM seed")
             })?;
+            let start = Instant::now();
+            let key = lean_pq::xmss::SecretKey::from_seed(black_box(seed));
             let duration = start.elapsed();
             black_box(key.public_key());
             lean_durations.push(duration);
@@ -196,18 +190,14 @@ fn measure_key_creation(samples: usize) -> Result<ComparisonReport> {
             let key = record_batched_sample(
                 &mut lighthouse_durations,
                 lighthouse_iterations,
-                |iterations| {
-                    time_last_value_batch(iterations, lighthouse_bls::SecretKey::random)
-                },
+                |iterations| time_last_value_batch(iterations, lighthouse_bls::SecretKey::random),
                 |key| {
                     black_box(key.public_key());
                     Ok(())
                 },
             )
             .with_context(|| {
-                format!(
-                    "{WORKLOAD} ({KEY_CREATION_SLOTS} slots, sample {sample}): Lighthouse key generation failed"
-                )
+                format!("{WORKLOAD} (sample {sample}): Lighthouse key generation failed")
             })?;
             retained_lighthouse.get_or_insert(key);
             Ok(())
@@ -219,14 +209,9 @@ fn measure_key_creation(samples: usize) -> Result<ComparisonReport> {
         retained_lighthouse.context("key_creation retained no Lighthouse secret key")?;
     ComparisonReport::new(
         WORKLOAD,
-        KEY_CREATION_SLOTS,
-        summarize(lean_durations, WORKLOAD, KEY_CREATION_SLOTS, "LeanVM")?,
-        summarize(
-            lighthouse_durations,
-            WORKLOAD,
-            KEY_CREATION_SLOTS,
-            "Lighthouse",
-        )?,
+        1,
+        summarize(lean_durations, WORKLOAD, 1, "LeanVM")?,
+        summarize(lighthouse_durations, WORKLOAD, 1, "Lighthouse")?,
         lean_key.to_bytes().len(),
         lighthouse_key.serialize().as_ref().len(),
     )
@@ -241,32 +226,25 @@ fn measure_recursive_aggregations(
     let Some(&maximum_fan_in) = fan_ins.iter().max() else {
         return Ok(Vec::new());
     };
-    let last_slot = u32::try_from(MAX_DISTINCT_CLAIMS - 1)
-        .context("the recursive fixture slot count must fit in u32")?;
-    let claim = lean_multisig::Claim::new(deterministic_key_material(0)?, 0);
     let mut children = Vec::with_capacity(maximum_fan_in);
-    let mut public_keys = Vec::with_capacity(maximum_fan_in * RECURSIVE_CHILD_SIGNERS);
+    let mut claims = Vec::with_capacity(maximum_fan_in * RECURSIVE_CHILD_SIGNERS);
 
     for child_index in 0..maximum_fan_in {
         let signer_range = recursive_signer_range(child_index)?;
-        let child_keys_start = public_keys.len();
-        let mut signatures = Vec::with_capacity(RECURSIVE_CHILD_SIGNERS);
+        let child_claims_start = claims.len();
+        let mut inputs = Vec::with_capacity(RECURSIVE_CHILD_SIGNERS);
         for signer_index in signer_range {
-            let seed = deterministic_key_material(signer_index).with_context(|| {
-                format!("failed to create seed for recursive signer {signer_index}")
+            let input = lean_fixture_signer(signer_index, 0).with_context(|| {
+                format!("failed to create recursive fixture signer {signer_index}")
             })?;
-            let key = lean_multisig::SecretKey::from_seed(seed, 0..=last_slot)
-                .with_context(|| format!("failed to create recursive signer {signer_index}"))?;
-            public_keys.push(key.public_key());
-            signatures.push(key.sign(&claim).with_context(|| {
-                format!("failed to sign the recursive claim with signer {signer_index}")
-            })?);
+            claims.push((input.0, input.1));
+            inputs.push(input);
         }
 
-        let child = lean_multisig::aggregate(signatures, &claim)
+        let child = lean_pq::aggregate(&[], &inputs, &[])
             .with_context(|| format!("failed to build recursive child proof {child_index}"))?;
-        lean_multisig::verify(&child, &public_keys[child_keys_start..], &claim)
-            .with_context(|| format!("recursive child proof {child_index} failed verification"))?;
+        ensure_lean_claims(&child, &sorted_claims(&claims[child_claims_start..]))
+            .with_context(|| format!("recursive child proof {child_index} lists wrong claims"))?;
         children.push(child);
     }
 
@@ -276,32 +254,31 @@ fn measure_recursive_aggregations(
             let total_signers = fan_in
                 .checked_mul(RECURSIVE_CHILD_SIGNERS)
                 .context("recursive total signer count overflowed")?;
-            let expected = &public_keys[..total_signers];
+            let expected = sorted_claims(&claims[..total_signers]);
+            let inputs = children[..fan_in].iter().collect::<Vec<_>>();
             run_optional_warmup(warmup_proofs, || {
-                let aggregate = lean_multisig::aggregate(children[..fan_in].to_vec(), &claim)
-                    .with_context(|| {
-                        format!("recursive fan-in {fan_in} proof warm-up failed")
-                    })?;
-                lean_multisig::verify(&aggregate, expected, &claim).with_context(|| {
-                    format!("recursive fan-in {fan_in} proof warm-up failed verification")
+                let aggregate = lean_pq::aggregate(&inputs, &[], &[]).with_context(|| {
+                    format!("recursive fan-in {fan_in} proof warm-up failed")
+                })?;
+                ensure_lean_claims(&aggregate, &expected).with_context(|| {
+                    format!("recursive fan-in {fan_in} proof warm-up lists wrong claims")
                 })?;
                 Ok(aggregate)
             })?;
             let mut durations = Vec::with_capacity(samples);
             let mut retained = None;
             for sample in 0..samples {
-                let inputs = children[..fan_in].to_vec();
                 let start = Instant::now();
-                let aggregate = lean_multisig::aggregate(inputs, &claim);
+                let aggregate = lean_pq::aggregate(&inputs, &[], &[]);
                 let duration = start.elapsed();
                 let aggregate = aggregate.with_context(|| {
                     format!(
                         "recursive same-claim aggregation (fan-in {fan_in}, sample {sample}) failed"
                     )
                 })?;
-                lean_multisig::verify(&aggregate, expected, &claim).with_context(|| {
+                ensure_lean_claims(&aggregate, &expected).with_context(|| {
                     format!(
-                        "recursive same-claim aggregation (fan-in {fan_in}, sample {sample}) failed post-timing verification"
+                        "recursive same-claim aggregation (fan-in {fan_in}, sample {sample}) lists wrong claims"
                     )
                 })?;
                 durations.push(duration);
@@ -336,6 +313,25 @@ fn recursive_signer_range(child_index: usize) -> Result<Range<usize>> {
     Ok(start..end)
 }
 
+fn sorted_claims(claims: &[LeanXmssClaim]) -> Vec<LeanXmssClaim> {
+    let mut sorted = claims.to_vec();
+    sorted.sort_unstable();
+    sorted
+}
+
+/// Checks the claims a proven aggregate lists; the proof itself is already verified.
+fn ensure_lean_claims(aggregate: &lean_pq::Aggregate, expected: &[LeanXmssClaim]) -> Result<()> {
+    ensure!(
+        aggregate.xmss_claims() == expected,
+        "LeanVM aggregate does not list exactly the expected leanXMSS claims"
+    );
+    ensure!(
+        aggregate.sphincs_claims().is_empty(),
+        "LeanVM aggregate lists unexpected leanSPHINCS claims"
+    );
+    Ok(())
+}
+
 fn write_report_files(report: &BenchmarkReport, config: &RunConfig) -> Result<()> {
     if let Some(path) = config.json_path.as_ref() {
         let json = serde_json::to_string_pretty(&report)
@@ -361,31 +357,52 @@ fn write_report_files(report: &BenchmarkReport, config: &RunConfig) -> Result<()
     Ok(())
 }
 
+/// Times one LeanVM proof of `inputs`, then checks its claims outside the timed region.
+fn timed_lean_aggregate(
+    inputs: &[LeanXmssInput],
+    expected: &[LeanXmssClaim],
+) -> Result<(Duration, lean_pq::Aggregate)> {
+    let start = Instant::now();
+    let aggregate = lean_pq::aggregate(&[], inputs, &[]);
+    let duration = start.elapsed();
+    let aggregate = aggregate.context("LeanVM aggregation failed")?;
+    ensure_lean_claims(&aggregate, expected)
+        .context("LeanVM aggregate failed the post-timing claim check")?;
+    Ok((duration, aggregate))
+}
+
+/// Times decoding and verifying one serialized LeanVM aggregate, then checks its claims
+/// outside the timed region.
+fn timed_lean_verify(bytes: &[u8], expected: &[LeanXmssClaim]) -> Result<Duration> {
+    let start = Instant::now();
+    let aggregate = lean_pq::Aggregate::from_bytes(bytes);
+    let duration = start.elapsed();
+    let aggregate = aggregate.context("LeanVM verification failed")?;
+    ensure_lean_claims(&aggregate, expected)
+        .context("LeanVM aggregate failed the post-timing claim check")?;
+    Ok(duration)
+}
+
 fn measure_same_claim_aggregate(
     fixtures: &FixtureSet,
-    lean_signers: &[lean_multisig::PublicKey],
+    lean_inputs: &[LeanXmssInput],
+    lean_expected: &[LeanXmssClaim],
     bls_public_keys: &[&lighthouse_bls::PublicKey],
     samples: usize,
     size: usize,
     warmup_proofs: bool,
 ) -> Result<(
     ComparisonReport,
-    lean_multisig::Signature,
+    lean_pq::Aggregate,
     lighthouse_bls::AggregateSignature,
 )> {
     const WORKLOAD: &str = "same_claim_aggregate";
-    let claim = fixtures.lean_claims()[0];
     let bls_message = fixtures.bls_messages()[0];
 
     let warmup_lean = run_optional_warmup(warmup_proofs, || {
-        let aggregate = lean_multisig::aggregate(fixtures.lean_signatures().to_vec(), &claim)
-            .with_context(|| {
-                format!("{WORKLOAD} (input size {size}): Lean proof warm-up failed")
-            })?;
-        lean_multisig::verify(&aggregate, lean_signers, &claim).with_context(|| {
-            format!("{WORKLOAD} (input size {size}): Lean proof warm-up failed verification")
-        })?;
-        Ok(aggregate)
+        timed_lean_aggregate(lean_inputs, lean_expected)
+            .map(|(_, aggregate)| aggregate)
+            .with_context(|| format!("{WORKLOAD} (input size {size}): Lean proof warm-up failed"))
     })?;
 
     let lighthouse_iterations = calibrate_batch_iterations(
@@ -412,18 +429,8 @@ fn measure_same_claim_aggregate(
     for_each_paired_sample(
         samples,
         |sample| {
-            let signatures = fixtures.lean_signatures().to_vec();
-            let start = Instant::now();
-            let aggregate = lean_multisig::aggregate(signatures, &claim);
-            let duration = start.elapsed();
-            let aggregate = aggregate.with_context(|| {
-                format!("{WORKLOAD} (input size {size}, sample {sample}): Lean aggregation failed")
-            })?;
-            lean_multisig::verify(&aggregate, lean_signers, &claim).with_context(|| {
-                format!(
-                    "{WORKLOAD} (input size {size}, sample {sample}): Lean aggregate failed post-timing verification"
-                )
-            })?;
+            let (duration, aggregate) = timed_lean_aggregate(lean_inputs, lean_expected)
+                .with_context(|| format!("{WORKLOAD} (input size {size}, sample {sample})"))?;
             lean_durations.push(duration);
             retained_lean.get_or_insert(aggregate);
             Ok(())
@@ -468,22 +475,21 @@ fn measure_same_claim_aggregate(
     )
     .with_context(|| format!("failed to assemble {WORKLOAD} report for input size {size}"))?;
 
-    let verification_lean = warmup_lean.unwrap_or_else(|| timed_lean.clone());
+    let verification_lean = warmup_lean.unwrap_or(timed_lean);
     Ok((report, verification_lean, timed_lighthouse))
 }
 
-#[allow(clippy::too_many_arguments)]
 fn measure_same_claim_verify(
-    lean_aggregate: &lean_multisig::Signature,
+    lean_aggregate: &lean_pq::Aggregate,
     bls_aggregate: &lighthouse_bls::AggregateSignature,
-    claim: &lean_multisig::Claim,
-    lean_signers: &[lean_multisig::PublicKey],
+    lean_expected: &[LeanXmssClaim],
     bls_message: lighthouse_bls::Hash256,
     bls_public_keys: &[&lighthouse_bls::PublicKey],
     samples: usize,
     size: usize,
 ) -> Result<ComparisonReport> {
     const WORKLOAD: &str = "same_claim_verify";
+    let lean_bytes = lean_aggregate.to_bytes();
     let lighthouse_iterations =
         calibrate_batch_iterations(MIN_LIGHTHOUSE_BATCH_DURATION, |iterations| {
             let (elapsed, all_valid) = time_bool_batch(iterations, || {
@@ -505,12 +511,8 @@ fn measure_same_claim_verify(
     for_each_paired_sample(
         samples,
         |sample| {
-            let start = Instant::now();
-            let result = lean_multisig::verify(lean_aggregate, lean_signers, claim);
-            let duration = start.elapsed();
-            result.with_context(|| {
-                format!("{WORKLOAD} (input size {size}, sample {sample}): Lean verification failed")
-            })?;
+            let duration = timed_lean_verify(&lean_bytes, lean_expected)
+                .with_context(|| format!("{WORKLOAD} (input size {size}, sample {sample})"))?;
             lean_durations.push(duration);
             Ok(())
         },
@@ -543,15 +545,17 @@ fn measure_same_claim_verify(
         size,
         summarize(lean_durations, WORKLOAD, size, "Lean")?,
         summarize(lighthouse_durations, WORKLOAD, size, "Lighthouse")?,
-        lean_aggregate.to_bytes().len(),
+        lean_bytes.len(),
         bls_aggregate.serialize().len(),
     )
     .with_context(|| format!("failed to assemble {WORKLOAD} report for input size {size}"))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn measure_distinct_claim_aggregate(
     fixtures: &FixtureSet,
-    lean_expected: &[lean_multisig::ClaimSigners],
+    lean_inputs: &[LeanXmssInput],
+    lean_expected: &[LeanXmssClaim],
     bls_messages: &[lighthouse_bls::Hash256],
     bls_public_keys: &[&lighthouse_bls::PublicKey],
     samples: usize,
@@ -559,20 +563,15 @@ fn measure_distinct_claim_aggregate(
     warmup_proofs: bool,
 ) -> Result<(
     ComparisonReport,
-    lean_multisig::MultiClaimProof,
+    lean_pq::Aggregate,
     lighthouse_bls::AggregateSignature,
 )> {
     const WORKLOAD: &str = "distinct_claim_aggregate";
 
     let warmup_lean = run_optional_warmup(warmup_proofs, || {
-        let aggregate = lean_multisig::merge_claims(fixtures.lean_signatures().to_vec())
-            .with_context(|| {
-                format!("{WORKLOAD} (input size {size}): Lean proof warm-up failed")
-            })?;
-        lean_multisig::verify_claims(&aggregate, lean_expected).with_context(|| {
-            format!("{WORKLOAD} (input size {size}): Lean proof warm-up failed verification")
-        })?;
-        Ok(aggregate)
+        timed_lean_aggregate(lean_inputs, lean_expected)
+            .map(|(_, aggregate)| aggregate)
+            .with_context(|| format!("{WORKLOAD} (input size {size}): Lean proof warm-up failed"))
     })?;
 
     let lighthouse_iterations = calibrate_batch_iterations(
@@ -599,18 +598,8 @@ fn measure_distinct_claim_aggregate(
     for_each_paired_sample(
         samples,
         |sample| {
-            let signatures = fixtures.lean_signatures().to_vec();
-            let start = Instant::now();
-            let aggregate = lean_multisig::merge_claims(signatures);
-            let duration = start.elapsed();
-            let aggregate = aggregate.with_context(|| {
-                format!("{WORKLOAD} (input size {size}, sample {sample}): Lean aggregation failed")
-            })?;
-            lean_multisig::verify_claims(&aggregate, lean_expected).with_context(|| {
-                format!(
-                    "{WORKLOAD} (input size {size}, sample {sample}): Lean aggregate failed post-timing verification"
-                )
-            })?;
+            let (duration, aggregate) = timed_lean_aggregate(lean_inputs, lean_expected)
+                .with_context(|| format!("{WORKLOAD} (input size {size}, sample {sample})"))?;
             lean_durations.push(duration);
             retained_lean.get_or_insert(aggregate);
             Ok(())
@@ -653,13 +642,15 @@ fn measure_distinct_claim_aggregate(
     )
     .with_context(|| format!("failed to assemble {WORKLOAD} report for input size {size}"))?;
 
-    let verification_lean = warmup_lean.unwrap_or_else(|| timed_lean.clone());
+    let verification_lean = warmup_lean.unwrap_or(timed_lean);
     Ok((report, verification_lean, timed_lighthouse))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn measure_mixed_claim_aggregate(
     fixtures: &FixtureSet,
-    lean_expected: &[lean_multisig::ClaimSigners],
+    lean_inputs: &[LeanXmssInput],
+    lean_expected: &[LeanXmssClaim],
     bls_messages: &[lighthouse_bls::Hash256],
     bls_public_keys: &[&lighthouse_bls::PublicKey],
     samples: usize,
@@ -667,11 +658,12 @@ fn measure_mixed_claim_aggregate(
     claim_count: usize,
 ) -> Result<(
     ComparisonReport,
-    lean_multisig::MultiClaimProof,
+    lean_pq::Aggregate,
     lighthouse_bls::AggregateSignature,
 )> {
     let (mut report, lean_aggregate, bls_aggregate) = measure_distinct_claim_aggregate(
         fixtures,
+        lean_inputs,
         lean_expected,
         bls_messages,
         bls_public_keys,
@@ -687,15 +679,16 @@ fn measure_mixed_claim_aggregate(
 }
 
 fn measure_distinct_claim_verify(
-    lean_aggregate: &lean_multisig::MultiClaimProof,
+    lean_aggregate: &lean_pq::Aggregate,
     bls_aggregate: &lighthouse_bls::AggregateSignature,
-    lean_expected: &[lean_multisig::ClaimSigners],
+    lean_expected: &[LeanXmssClaim],
     bls_messages: &[lighthouse_bls::Hash256],
     bls_public_keys: &[&lighthouse_bls::PublicKey],
     samples: usize,
     size: usize,
 ) -> Result<ComparisonReport> {
     const WORKLOAD: &str = DISTINCT_CLAIM_VERIFY_WORKLOAD;
+    let lean_bytes = lean_aggregate.to_bytes();
     let lighthouse_iterations =
         calibrate_batch_iterations(MIN_LIGHTHOUSE_BATCH_DURATION, |iterations| {
             let (elapsed, all_valid) = time_bool_batch(iterations, || {
@@ -717,12 +710,8 @@ fn measure_distinct_claim_verify(
     for_each_paired_sample(
         samples,
         |sample| {
-            let start = Instant::now();
-            let result = lean_multisig::verify_claims(lean_aggregate, lean_expected);
-            let duration = start.elapsed();
-            result.with_context(|| {
-                format!("{WORKLOAD} (input size {size}, sample {sample}): Lean verification failed")
-            })?;
+            let duration = timed_lean_verify(&lean_bytes, lean_expected)
+                .with_context(|| format!("{WORKLOAD} (input size {size}, sample {sample})"))?;
             lean_durations.push(duration);
             Ok(())
         },
@@ -753,7 +742,7 @@ fn measure_distinct_claim_verify(
         size,
         summarize(lean_durations, WORKLOAD, size, "Lean")?,
         summarize(lighthouse_durations, WORKLOAD, size, "Lighthouse")?,
-        lean_aggregate.to_bytes().len(),
+        lean_bytes.len(),
         bls_aggregate.serialize().len(),
     )
     .with_context(|| format!("failed to assemble {WORKLOAD} report for input size {size}"))
@@ -761,13 +750,14 @@ fn measure_distinct_claim_verify(
 
 fn measure_mixed_claim_verify(
     fixtures: &FixtureSet,
-    lean_aggregate: &lean_multisig::MultiClaimProof,
+    lean_aggregate: &lean_pq::Aggregate,
     bls_aggregate: &lighthouse_bls::AggregateSignature,
-    lean_expected: &[lean_multisig::ClaimSigners],
+    lean_expected: &[LeanXmssClaim],
     samples: usize,
     claim_count: usize,
 ) -> Result<ComparisonReport> {
     const WORKLOAD: &str = "mixed_claim_verify_conceptual";
+    let lean_bytes = lean_aggregate.to_bytes();
     let lighthouse_iterations =
         calibrate_batch_iterations(MIN_LIGHTHOUSE_BATCH_DURATION, |iterations| {
             let (elapsed, all_valid) = time_bool_batch(iterations, || {
@@ -788,12 +778,8 @@ fn measure_mixed_claim_verify(
     for_each_paired_sample(
         samples,
         |sample| {
-            let start = Instant::now();
-            let result = lean_multisig::verify_claims(lean_aggregate, lean_expected);
-            let duration = start.elapsed();
-            result.with_context(|| {
-                format!("{WORKLOAD} (sample {sample}): Lean verification failed")
-            })?;
+            let duration = timed_lean_verify(&lean_bytes, lean_expected)
+                .with_context(|| format!("{WORKLOAD} (sample {sample})"))?;
             lean_durations.push(duration);
             Ok(())
         },
@@ -830,7 +816,7 @@ fn measure_mixed_claim_verify(
             MIXED_CLAIM_SIGNATURES,
             "Lighthouse",
         )?,
-        lean_aggregate.to_bytes().len(),
+        lean_bytes.len(),
         bls_aggregate.serialize().len(),
     )
     .with_context(|| format!("failed to assemble {WORKLOAD} report"))?
@@ -1293,7 +1279,7 @@ mod tests {
             static NEXT_ID: AtomicU64 = AtomicU64::new(0);
             let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
             let path = std::env::temp_dir().join(format!(
-                "lean-multisig-comparison-runner-{label}-{}-{id}",
+                "lean-pq-comparison-runner-{label}-{}-{id}",
                 std::process::id()
             ));
             fs::create_dir(&path).unwrap();

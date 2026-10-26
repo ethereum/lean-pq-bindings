@@ -1,1 +1,1 @@
-rootProject.name = "lean-multisig-java"
+rootProject.name = "lean-pq-java"

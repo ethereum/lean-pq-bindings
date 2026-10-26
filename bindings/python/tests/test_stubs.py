@@ -16,7 +16,7 @@ def test_stubs_match_runtime():
             sys.executable,
             "-m",
             "mypy.stubtest",
-            "py_lean_multisig",
+            "py_lean_pq",
             "--allowlist",
             str(allowlist),
         ],

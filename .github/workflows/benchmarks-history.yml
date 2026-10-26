@@ -38,7 +38,7 @@ on:
         default: '1,8,16,256,512'
         type: string
       distinct_sizes:
-        description: Comma-separated distinct-claim counts (maximum 16)
+        description: Comma-separated distinct-claim counts (maximum 512)
         required: true
         default: '1,8,16'
         type: string
@@ -108,7 +108,7 @@ jobs:
         run: |
           set -o pipefail
           rm -rf -- target/criterion
-          cargo bench -p lean-multisig-comparison --bench comparison -- \
+          cargo bench -p lean-pq-comparison --bench comparison -- \
             --noplot 2>&1 \
             | tee benchmark-artifacts/fast/criterion-output.txt
 
@@ -153,7 +153,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   slow:
-    name: Measure large-key and proof benchmarks
+    name: Measure key-creation and proof benchmarks
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.suite == 'slow' || inputs.suite == 'all'))
     runs-on: size-attester7870-x64
     timeout-minutes: 180
@@ -217,7 +217,6 @@ jobs:
             echo "lighthouse_revision=$lighthouse_revision"
             echo "suite=slow"
             echo "samples=$BENCH_SAMPLES"
-            echo "key_creation_slots=1048576"
             echo "same_sizes=$BENCH_SAME_SIZES"
             echo "distinct_sizes=$BENCH_DISTINCT_SIZES"
             echo "mixed_claim_shapes=512x8,512x16"
@@ -229,11 +228,11 @@ jobs:
             lscpu
           } > benchmark-artifacts/slow/environment.txt
 
-      - name: Run large-key and steady-state proof benchmarks
+      - name: Run key-creation and steady-state proof benchmarks
         shell: bash
         run: |
           set -o pipefail
-          cargo build --release -p lean-multisig-comparison --bin slow_comparison
+          cargo build --release -p lean-pq-comparison --bin slow_comparison
           /usr/bin/time -v -o benchmark-artifacts/slow/resource-usage.txt \
             target/release/slow_comparison \
             --samples "$BENCH_SAMPLES" \

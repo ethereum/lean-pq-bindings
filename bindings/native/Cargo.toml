@@ -1,5 +1,5 @@
 [package]
-name = "lean-multisig-native"
+name = "lean-pq-native"
 version = "0.1.0"
 edition = "2021"
 publish = false
@@ -8,4 +8,4 @@ publish = false
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
-lean_multisig_api = { workspace = true }
+lean-pq = { workspace = true }

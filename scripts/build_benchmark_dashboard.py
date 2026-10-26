@@ -24,7 +24,6 @@ PEAK_RSS_RE = re.compile(
     r"^\s*Maximum resident set size \(kbytes\):\s*(?P<value>\S+)\s*$"
 )
 MAX_EXACT_KIB = (2**53 - 1) // 1024
-KEY_CREATION_SLOTS = 2**20
 MAX_RECURSIVE_FAN_IN = 16
 RECURSIVE_CHILD_SIGNERS = 512
 
@@ -340,10 +339,8 @@ def build_slow(
     ]
     if len(key_creation) != 1:
         raise ValueError("comparisons must contain exactly one key_creation row")
-    if key_creation[0].get("input_size") != KEY_CREATION_SLOTS:
-        raise ValueError(f"key_creation must measure {KEY_CREATION_SLOTS} slots")
-    if environment.get("key_creation_slots") != str(KEY_CREATION_SLOTS):
-        raise ValueError("environment key_creation_slots does not match the benchmark")
+    if key_creation[0].get("input_size") != 1:
+        raise ValueError("key_creation must measure exactly one key")
 
     peak_rss_bytes = parse_peak_rss(resource_path)
     document = {

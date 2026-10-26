@@ -3,16 +3,16 @@ requires = ["maturin>=1.7,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "py-lean-multisig"
+name = "py-lean-pq"
 # Version lives in Cargo.toml; maturin reads it from there. Release Please
 # bumps the Cargo.toml version on each release PR.
 dynamic = ["version"]
-description = "Python bindings for leanMultisig: XMSS signatures + zkVM aggregation"
+description = "Python bindings for leanVM's leanXMSS and leanSPHINCS post-quantum signatures and their recursive aggregation"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 authors = [{ name = "Kevaundray Wedderburn" }]
 requires-python = ">=3.11"
-keywords = ["xmss", "post-quantum", "ethereum", "leanmultisig", "zkvm", "snark"]
+keywords = ["xmss", "sphincs", "leanxmss", "leansphincs", "post-quantum", "ethereum", "zkvm", "snark"]
 classifiers = [
   "Programming Language :: Rust",
   "Programming Language :: Python :: Implementation :: CPython",
@@ -27,10 +27,18 @@ classifiers = [
 dev = ["maturin>=1.7,<2.0", "pytest>=8", "mypy>=1.10"]
 
 [project.urls]
-Repository = "https://github.com/ethereum/lean-multisig-bindings"
-Issues = "https://github.com/ethereum/lean-multisig-bindings/issues"
-Upstream = "https://github.com/leanEthereum/leanMultisig"
+Repository = "https://github.com/ethereum/lean-pq-bindings"
+Issues = "https://github.com/ethereum/lean-pq-bindings/issues"
+Upstream = "https://github.com/leanEthereum/leanVM"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
-include = ["py.typed", "py_lean_multisig.pyi"]
+include = ["py.typed", "py_lean_pq.pyi"]
+# Debug builds of leanVM prove roughly 30x slower, so the
+# editable install `uv run` performs must be a release build as well.
+profile = "release"
+
+[tool.uv]
+# Rebuild the editable install when the Rust sources change, not only when
+# pyproject.toml does; otherwise `uv run` reinstalls a stale cached build.
+cache-keys = [{ file = "pyproject.toml" }, { file = "Cargo.toml" }, { file = "src/**/*.rs" }]

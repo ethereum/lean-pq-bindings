@@ -8,11 +8,10 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use lean_multisig_comparison::{
+use lean_pq_comparison::{
     BenchmarkReport, ComparisonReport, RecursiveAggregationReport, RunConfig, SampleSummary,
-    SupplementalReport, KEY_CREATION_SLOTS, LIGHTHOUSE_REVISION, MAX_DISTINCT_CLAIMS,
-    MAX_RECURSIVE_FAN_IN, MAX_SAME_CLAIM_SIGNERS, MIXED_CLAIM_COUNTS, MIXED_CLAIM_SIGNATURES,
-    RECURSIVE_CHILD_SIGNERS,
+    SupplementalReport, KEY_CREATION_WORKLOAD, LIGHTHOUSE_REVISION, MAX_RECURSIVE_FAN_IN,
+    MAX_SIGNERS, MIXED_CLAIM_COUNTS, MIXED_CLAIM_SIGNATURES, RECURSIVE_CHILD_SIGNERS,
 };
 
 #[test]
@@ -61,7 +60,7 @@ fn comparison_report_accepts_the_expanded_same_claim_limit() {
 
     assert!(ComparisonReport::new(
         "same_claim_aggregate",
-        MAX_SAME_CLAIM_SIGNERS,
+        MAX_SIGNERS,
         summary.clone(),
         summary,
         1,
@@ -110,23 +109,44 @@ fn comparison_report_rejects_invalid_mixed_claim_shapes() {
 
     assert!(report().with_claim_count(1).is_err());
     assert!(report().with_claim_count(3).is_err());
-    assert!(report().with_claim_count(MAX_DISTINCT_CLAIMS + 1).is_err());
+    assert!(report().with_claim_count(16).is_err());
 }
 
 #[test]
-fn comparison_report_accepts_only_the_realistic_key_creation_size() {
+fn comparison_report_accepts_more_than_sixteen_mixed_claims() {
     let summary = SampleSummary::from_durations([Duration::from_millis(1)]).unwrap();
 
-    assert!(ComparisonReport::new(
-        "key_creation",
-        KEY_CREATION_SLOTS,
+    let report = ComparisonReport::new(
+        "mixed_claim_aggregate",
+        MIXED_CLAIM_SIGNATURES,
         summary.clone(),
-        summary.clone(),
+        summary,
         1,
         1,
     )
+    .unwrap()
+    .with_claim_count(32)
+    .unwrap();
+
+    assert_eq!(report.claim_count, Some(32));
+}
+
+#[test]
+fn comparison_report_accepts_only_one_key_for_key_creation() {
+    let summary = SampleSummary::from_durations([Duration::from_millis(1)]).unwrap();
+
+    assert!(ComparisonReport::new(
+        KEY_CREATION_WORKLOAD,
+        1,
+        summary.clone(),
+        summary.clone(),
+        32,
+        32,
+    )
     .is_ok());
-    assert!(ComparisonReport::new("key_creation", 16, summary.clone(), summary, 1, 1,).is_err());
+    assert!(
+        ComparisonReport::new(KEY_CREATION_WORKLOAD, 2, summary.clone(), summary, 32, 32,).is_err()
+    );
 }
 
 #[test]
@@ -158,7 +178,7 @@ fn comparison_report_rejects_zero_sizes() {
     .is_err());
     assert!(ComparisonReport::new(
         "same_claim_aggregate",
-        MAX_SAME_CLAIM_SIGNERS + 1,
+        MAX_SIGNERS + 1,
         summary.clone(),
         summary.clone(),
         1,
@@ -224,6 +244,10 @@ fn config_accepts_mixed_claim_counts() {
         RunConfig::parse_from(["slow-comparison", "--mixed-claim-counts", "8,16"]).unwrap();
 
     assert_eq!(config.mixed_claim_counts, vec![8, 16]);
+    let wide =
+        RunConfig::parse_from(["slow-comparison", "--mixed-claim-counts", "32,512"]).unwrap();
+    assert_eq!(wide.mixed_claim_counts, vec![32, 512]);
+    assert!(RunConfig::parse_from(["slow-comparison", "--mixed-claim-counts", "1024"]).is_err());
     assert!(RunConfig::parse_from([
         "slow-comparison",
         "--mixed-claim-counts",
@@ -409,7 +433,7 @@ impl TestDirectory {
         static NEXT_ID: AtomicU64 = AtomicU64::new(0);
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
         let path = std::env::temp_dir().join(format!(
-            "lean-multisig-comparison-{label}-{}-{id}",
+            "lean-pq-comparison-{label}-{}-{id}",
             std::process::id()
         ));
         fs::create_dir(&path).unwrap();
@@ -488,18 +512,22 @@ fn config_reports_the_exact_independent_size_limits() {
     );
 
     let distinct_error =
-        RunConfig::parse_from(["slow-comparison", "--distinct-sizes", "17"]).unwrap_err();
+        RunConfig::parse_from(["slow-comparison", "--distinct-sizes", "513"]).unwrap_err();
     assert_eq!(
         distinct_error.to_string(),
-        "--distinct-sizes entry 17 exceeds maximum 16"
+        "--distinct-sizes entry 513 exceeds maximum 512"
     );
+
+    let distinct =
+        RunConfig::parse_from(["slow-comparison", "--distinct-sizes", "17,512"]).unwrap();
+    assert_eq!(distinct.distinct_sizes, vec![17, 512]);
 }
 
 #[test]
 fn config_rejects_zero_samples_and_out_of_range_sizes() {
     assert!(RunConfig::parse_from(["slow-comparison", "--samples", "0"]).is_err());
     assert!(RunConfig::parse_from(["slow-comparison", "--sizes", "0"]).is_err());
-    assert!(RunConfig::parse_from(["slow-comparison", "--sizes", "17"]).is_err());
+    assert!(RunConfig::parse_from(["slow-comparison", "--sizes", "513"]).is_err());
 }
 
 #[test]

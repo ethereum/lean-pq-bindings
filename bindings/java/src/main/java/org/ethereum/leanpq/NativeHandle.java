@@ -1,4 +1,4 @@
-package org.ethereum.leanmultisig;
+package org.ethereum.leanpq;
 
 import java.lang.foreign.MemorySegment;
 import java.lang.ref.Cleaner;

@@ -1,42 +1,79 @@
-export declare class Claim {
-  constructor(message: Buffer, slot: number)
-  get message(): Buffer
-  get slot(): number
+/** A `(publicKey, message)` pair an aggregate attests. Both are 32 bytes. */
+export interface Claim {
+  publicKey: Buffer
+  message: Buffer
 }
 
-export declare class SecretKey {
-  static generate(slotStart: number, slotEnd: number): Promise<SecretKey>
-  static fromSeed(seed: Buffer, slotStart: number, slotEnd: number): Promise<SecretKey>
-  static fromBytes(data: Buffer): Promise<SecretKey>
+/** A raw signature to aggregate: a 32-byte public key, a 32-byte message, and its signature. */
+export interface SignedMessage {
+  publicKey: Buffer
+  message: Buffer
+  signature: Buffer
+}
+
+/** Builds the aggregation guest ahead of the first proof. Optional and idempotent. */
+export declare function setup(): Promise<void>
+
+/**
+ * A stateful leanXMSS secret key with `2^32` leaf indices. Never sign two different messages at
+ * the same leaf index.
+ */
+export declare class XmssSecretKey {
+  private constructor()
+  static generate(): Promise<XmssSecretKey>
+  static fromSeed(seed: Buffer): Promise<XmssSecretKey>
+  static fromBytes(data: Buffer): Promise<XmssSecretKey>
+  /** SECRET KEY MATERIAL: the 32-byte seed. */
   toBytes(): Buffer
   get publicKey(): Buffer
-  get slotStart(): number
-  get slotEnd(): number
-  prepare(slot: number): Promise<void>
-  sign(claim: Claim): Promise<Signature>
+  /** Builds the bottom tree `leafIndex` falls in ahead of signing there. */
+  prepare(leafIndex: number): Promise<void>
+  /** Resolves to a 2404-byte signature. */
+  sign(message: Buffer, leafIndex: number): Promise<Buffer>
 }
 
-export declare class Signature {
-  static fromBytes(data: Buffer, claim: Claim, signers: Buffer[]): Signature
+/** Throws if `signature` is not a valid leanXMSS signature of `message` under `publicKey`. */
+export declare function xmssVerify(publicKey: Buffer, message: Buffer, signature: Buffer): void
+
+/** A stateless leanSPHINCS secret key keeping one subtree of height `keptHeight` (at most 26). */
+export declare class SphincsSecretKey {
+  private constructor()
+  static generate(keptHeight: number): Promise<SphincsSecretKey>
+  static fromSeed(seed: Buffer, keptHeight: number): Promise<SphincsSecretKey>
+  static fromBytes(data: Buffer): Promise<SphincsSecretKey>
+  /** SECRET KEY MATERIAL: the 32-byte seed, then the kept height. */
   toBytes(): Buffer
-  get claim(): Claim
+  get publicKey(): Buffer
+  get keptHeight(): number
+  /** Resolves to a 4276-byte signature. */
+  sign(message: Buffer): Promise<Buffer>
 }
 
-export declare class ClaimSigners {
-  constructor(claim: Claim, signers: Buffer[])
-  get claim(): Claim
-  get signers(): Buffer[]
-}
+/** Throws if `signature` is not a valid leanSPHINCS signature of `message` under `publicKey`. */
+export declare function sphincsVerify(publicKey: Buffer, message: Buffer, signature: Buffer): void
 
-export declare class MultiClaimProof {
-  static fromBytes(data: Buffer, groups: ClaimSigners[]): MultiClaimProof
+/**
+ * A recursive proof that each listed public key signed its message. Every instance has been
+ * proven by `aggregate` or verified by `Aggregate.fromBytes`. It attests the claims it lists, not
+ * the claims you wanted: compare `xmssClaims` and `sphincsClaims` against what you expect.
+ */
+export declare class Aggregate {
+  private constructor()
+  /** Decodes and verifies an aggregate. */
+  static fromBytes(data: Buffer): Promise<Aggregate>
   toBytes(): Buffer
+  /** Strictly sorted. */
+  get xmssClaims(): Array<Claim>
+  /** Strictly sorted. */
+  get sphincsClaims(): Array<Claim>
 }
 
-export declare function setup(): Promise<void>
-export declare function aggregate(signatures: Signature[], claim: Claim): Promise<Signature>
-export declare function verify(signature: Signature, expectedSigners: Buffer[], claim: Claim): void
-export declare function verifiedSigners(signature: Signature, claim: Claim): Promise<Buffer[]>
-export declare function mergeClaims(signatures: Signature[]): Promise<MultiClaimProof>
-export declare function verifiedClaims(proof: MultiClaimProof): Promise<ClaimSigners[]>
-export declare function verifyClaims(proof: MultiClaimProof, expected: ClaimSigners[]): Promise<void>
+/**
+ * Proves every raw signature and every child's claims in one aggregate whose claims are their
+ * union. Raw signatures are verified first; at most 16 children; empty input is rejected.
+ */
+export declare function aggregate(input?: {
+  children?: Array<Aggregate>
+  xmss?: Array<SignedMessage>
+  sphincs?: Array<SignedMessage>
+}): Promise<Aggregate>

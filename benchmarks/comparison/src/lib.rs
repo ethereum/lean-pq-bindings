@@ -1,4 +1,4 @@
-//! Benchmark support for comparing lean-multisig with Lighthouse BLS.
+//! Benchmark support for comparing leanVM's leanXMSS aggregation with Lighthouse BLS.
 //!
 //! This crate supports the repository's comparison benchmarks and is not a
 //! supported public API.
@@ -13,19 +13,55 @@ use std::{
 use anyhow::{anyhow, ensure, Context, Result};
 use serde::{Deserialize, Serialize};
 
-pub const MAX_DISTINCT_CLAIMS: usize = lean_multisig::MAX_CLAIMS;
-pub const MAX_SAME_CLAIM_SIGNERS: usize = 512;
+pub const MAX_SIGNERS: usize = 512;
 pub const MIXED_CLAIM_SIGNATURES: usize = 512;
 pub const MIXED_CLAIM_COUNTS: [usize; 2] = [8, 16];
 pub const RECURSIVE_CHILD_SIGNERS: usize = 512;
-pub const MAX_RECURSIVE_FAN_IN: usize = MAX_DISTINCT_CLAIMS;
+pub const MAX_RECURSIVE_FAN_IN: usize = lean_pq::MAX_CHILDREN;
 pub const RECURSIVE_AGGREGATION_WORKLOAD: &str = "recursive_same_claim_aggregate";
-pub const KEY_CREATION_SLOTS: usize = 1 << 20;
+pub const KEY_CREATION_WORKLOAD: &str = "key_creation";
 pub const LIGHTHOUSE_REVISION: &str = "e423a66763bb1bd780492d635123f208d80c3538";
+/// The leaf indices every fixture signer's mock key is real over, a short range as in
+/// upstream's own benchmarks.
+pub const FIXTURE_FIRST_LEAF: lean_pq::xmss::LeafIndex = 0;
+pub const FIXTURE_LAST_LEAF: lean_pq::xmss::LeafIndex = 15;
 
-/// Returns deterministic, nonzero 32-byte key material for a fixture signer.
+/// Seed domains: a leanXMSS seed must back one key only, so mock fixture keys and full
+/// keys never share a seed.
+const FIXTURE_SEED_DOMAIN: u8 = 1;
+const FULL_KEY_SEED_DOMAIN: u8 = 2;
+
+/// Returns deterministic, nonzero 32-byte material: BLS fixture keys and messages.
 pub fn deterministic_key_material(index: usize) -> Result<[u8; 32]> {
     indexed_bytes(index)
+}
+
+/// Returns the seed of full leanXMSS key `index`, which no fixture signer's mock key uses.
+pub fn lean_full_key_seed(index: usize) -> Result<[u8; lean_pq::xmss::SEED_LEN]> {
+    lean_seed(FULL_KEY_SEED_DOMAIN, 0, index)
+}
+
+/// Returns untimed fixture signer `index` signing message `message_index`.
+///
+/// The key is upstream's mock leanXMSS key, real only over
+/// `FIXTURE_FIRST_LEAF..=FIXTURE_LAST_LEAF`, so its signature is a real leanXMSS signature
+/// at a fraction of a full key's generation cost. Each signer-and-message pair has its own
+/// seed, so one key only ever signs one message.
+pub fn lean_fixture_signer(index: usize, message_index: usize) -> Result<LeanXmssInput> {
+    use signatures::lean_xmss::mock;
+
+    let message = indexed_bytes(message_index)?;
+    let seed = lean_seed(FIXTURE_SEED_DOMAIN, message_index, index)?;
+    let leaf_span = usize::try_from(FIXTURE_LAST_LEAF - FIXTURE_FIRST_LEAF + 1)?;
+    let leaf_index =
+        FIXTURE_FIRST_LEAF + lean_pq::xmss::LeafIndex::try_from(message_index % leaf_span)?;
+    let (key, public_key) = mock::key_gen_from_seed(seed, FIXTURE_FIRST_LEAF, FIXTURE_LAST_LEAF);
+    let signature = mock::sign(&key, &message, leaf_index)?;
+    Ok((
+        lean_pq::xmss::PublicKey::from_bytes(&public_key.flatten())?,
+        message,
+        lean_pq::xmss::Signature::from_bytes(&signature.to_bytes())?,
+    ))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -102,15 +138,15 @@ impl ComparisonReport {
         let workload = workload.into();
         ensure!(!workload.is_empty(), "workload must not be empty");
         ensure!(input_size > 0, "input size must be greater than zero");
-        if workload == "key_creation" {
+        if workload == KEY_CREATION_WORKLOAD {
             ensure!(
-                input_size == KEY_CREATION_SLOTS,
-                "key_creation must measure exactly {KEY_CREATION_SLOTS} slots"
+                input_size == 1,
+                "{KEY_CREATION_WORKLOAD} must measure exactly one key"
             );
         } else {
             ensure!(
-                input_size <= MAX_SAME_CLAIM_SIGNERS,
-                "input size {input_size} exceeds maximum {MAX_SAME_CLAIM_SIGNERS}"
+                input_size <= MAX_SIGNERS,
+                "input size {input_size} exceeds maximum {MAX_SIGNERS}"
             );
         }
         ensure!(lean.median_ns > 0, "lean median must be greater than zero");
@@ -142,10 +178,6 @@ impl ComparisonReport {
             "claim count is only valid for mixed-claim workloads"
         );
         ensure!(claim_count > 1, "claim count must be greater than one");
-        ensure!(
-            claim_count <= MAX_DISTINCT_CLAIMS,
-            "claim count {claim_count} exceeds maximum {MAX_DISTINCT_CLAIMS}"
-        );
         ensure!(
             claim_count <= self.input_size,
             "claim count must not exceed the signature count"
@@ -467,7 +499,7 @@ impl RunConfig {
                     let text = value
                         .to_str()
                         .context("--sizes value must be valid UTF-8")?;
-                    sizes = Some(parse_sizes("--sizes", text, MAX_DISTINCT_CLAIMS)?);
+                    sizes = Some(parse_sizes("--sizes", text, MAX_SIGNERS)?);
                 }
                 argument if argument == OsStr::new("--same-sizes") => {
                     ensure!(
@@ -478,7 +510,7 @@ impl RunConfig {
                     let text = value
                         .to_str()
                         .context("--same-sizes value must be valid UTF-8")?;
-                    same_sizes = Some(parse_sizes("--same-sizes", text, MAX_SAME_CLAIM_SIGNERS)?);
+                    same_sizes = Some(parse_sizes("--same-sizes", text, MAX_SIGNERS)?);
                 }
                 argument if argument == OsStr::new("--distinct-sizes") => {
                     ensure!(
@@ -489,8 +521,7 @@ impl RunConfig {
                     let text = value
                         .to_str()
                         .context("--distinct-sizes value must be valid UTF-8")?;
-                    distinct_sizes =
-                        Some(parse_sizes("--distinct-sizes", text, MAX_DISTINCT_CLAIMS)?);
+                    distinct_sizes = Some(parse_sizes("--distinct-sizes", text, MAX_SIGNERS)?);
                 }
                 argument if argument == OsStr::new("--mixed-claim-counts") => {
                     ensure!(
@@ -501,7 +532,7 @@ impl RunConfig {
                     let text = value
                         .to_str()
                         .context("--mixed-claim-counts value must be valid UTF-8")?;
-                    let parsed = parse_sizes("--mixed-claim-counts", text, MAX_DISTINCT_CLAIMS)?;
+                    let parsed = parse_sizes("--mixed-claim-counts", text, MIXED_CLAIM_SIGNATURES)?;
                     ensure!(
                         parsed.iter().all(|count| *count > 1),
                         "--mixed-claim-counts entries must be greater than one"
@@ -890,11 +921,20 @@ impl BlsFixtureSet {
     }
 }
 
+/// One raw leanXMSS aggregation input: a public key, its message, and its signature.
+pub type LeanXmssInput = (
+    lean_pq::xmss::PublicKey,
+    lean_pq::Message,
+    lean_pq::xmss::Signature,
+);
+
+/// One leanXMSS aggregate claim: a public key and the message it signed.
+pub type LeanXmssClaim = (lean_pq::xmss::PublicKey, lean_pq::Message);
+
 pub struct FixtureSet {
-    lean_claims: Vec<lean_multisig::Claim>,
-    lean_keys: Vec<lean_multisig::SecretKey>,
-    lean_signatures: Vec<lean_multisig::Signature>,
-    lean_public_keys: Vec<lean_multisig::PublicKey>,
+    lean_messages: Vec<lean_pq::Message>,
+    lean_signatures: Vec<lean_pq::xmss::Signature>,
+    lean_public_keys: Vec<lean_pq::xmss::PublicKey>,
     bls: BlsFixtureSet,
 }
 
@@ -904,67 +944,34 @@ impl FixtureSet {
     }
 
     pub fn distinct_claims(count: usize) -> Result<Self> {
-        if count > MAX_DISTINCT_CLAIMS {
-            return Err(anyhow!(
-                "distinct-claim fixture count {count} exceeds maximum {MAX_DISTINCT_CLAIMS}"
-            ));
-        }
-
         Self::build(count, count)
     }
 
     pub fn mixed_claims(signature_count: usize, claim_count: usize) -> Result<Self> {
-        ensure!(
-            signature_count <= MAX_SAME_CLAIM_SIGNERS,
-            "mixed-claim signature count {signature_count} exceeds maximum {MAX_SAME_CLAIM_SIGNERS}"
-        );
-        ensure!(
-            claim_count <= MAX_DISTINCT_CLAIMS,
-            "mixed-claim count {claim_count} exceeds maximum {MAX_DISTINCT_CLAIMS}"
-        );
         Self::build(signature_count, claim_count)
     }
 
     fn build(count: usize, claim_count: usize) -> Result<Self> {
+        ensure!(
+            count <= MAX_SIGNERS,
+            "fixture signer count {count} exceeds maximum {MAX_SIGNERS}"
+        );
         let bls = BlsFixtureSet::build(count, claim_count)?;
 
-        let mut lean_claims = Vec::with_capacity(count);
-        let mut lean_keys = Vec::with_capacity(count);
+        let mut lean_messages = Vec::with_capacity(count);
         let mut lean_signatures = Vec::with_capacity(count);
         let mut lean_public_keys = Vec::with_capacity(count);
-        let last_slot = MAX_DISTINCT_CLAIMS
-            .checked_sub(1)
-            .context("the supported claim count must be nonzero")
-            .and_then(|slot| {
-                u32::try_from(slot).context("the supported claim slots must fit in u32")
-            })?;
 
         for index in 0..count {
-            let message_index = index % claim_count;
-            let message = indexed_bytes(message_index)
-                .with_context(|| format!("failed to create message for signer {index}"))?;
-            let slot = u32::try_from(message_index)
-                .with_context(|| format!("slot does not fit in u32 for signer {index}"))?;
-            let claim = lean_multisig::Claim::new(message, slot);
-
-            let lean_seed = indexed_bytes(index)
-                .with_context(|| format!("failed to create XMSS seed for signer {index}"))?;
-            let lean_key = lean_multisig::SecretKey::from_seed(lean_seed, 0..=last_slot)
-                .with_context(|| format!("failed to create XMSS key for signer {index}"))?;
-            let lean_public_key = lean_key.public_key();
-            let lean_signature = lean_key
-                .sign(&claim)
-                .with_context(|| format!("failed to create XMSS signature for signer {index}"))?;
-
-            lean_claims.push(claim);
-            lean_keys.push(lean_key);
-            lean_signatures.push(lean_signature);
-            lean_public_keys.push(lean_public_key);
+            let (public_key, message, signature) = lean_fixture_signer(index, index % claim_count)
+                .with_context(|| format!("failed to create XMSS fixture signer {index}"))?;
+            lean_messages.push(message);
+            lean_signatures.push(signature);
+            lean_public_keys.push(public_key);
         }
 
         let fixtures = Self {
-            lean_claims,
-            lean_keys,
+            lean_messages,
             lean_signatures,
             lean_public_keys,
             bls,
@@ -975,12 +982,12 @@ impl FixtureSet {
 
     #[must_use]
     pub fn len(&self) -> usize {
-        self.lean_keys.len()
+        self.lean_signatures.len()
     }
 
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.lean_keys.is_empty()
+        self.lean_signatures.is_empty()
     }
 
     #[must_use]
@@ -988,39 +995,42 @@ impl FixtureSet {
         self.bls.claim_count()
     }
 
+    /// The raw signatures in the shape `lean_pq::aggregate` takes.
     #[must_use]
-    pub fn lean_claim_groups(&self) -> Vec<lean_multisig::ClaimSigners> {
-        (0..self.claim_count())
-            .map(|claim_index| lean_multisig::ClaimSigners {
-                claim: self.lean_claims[claim_index],
-                signers: self
-                    .lean_public_keys
-                    .iter()
-                    .skip(claim_index)
-                    .step_by(self.claim_count())
-                    .copied()
-                    .collect(),
-            })
+    pub fn lean_inputs(&self) -> Vec<LeanXmssInput> {
+        self.lean_public_keys
+            .iter()
+            .zip(&self.lean_messages)
+            .zip(&self.lean_signatures)
+            .map(|((public_key, message), signature)| (*public_key, *message, signature.clone()))
             .collect()
     }
 
+    /// The claims an aggregate of every fixture signature must list, strictly sorted.
     #[must_use]
-    pub fn lean_claims(&self) -> &[lean_multisig::Claim] {
-        &self.lean_claims
+    pub fn lean_expected_claims(&self) -> Vec<LeanXmssClaim> {
+        let mut claims = self
+            .lean_public_keys
+            .iter()
+            .copied()
+            .zip(self.lean_messages.iter().copied())
+            .collect::<Vec<_>>();
+        claims.sort_unstable();
+        claims
     }
 
     #[must_use]
-    pub fn lean_keys(&self) -> &[lean_multisig::SecretKey] {
-        &self.lean_keys
+    pub fn lean_messages(&self) -> &[lean_pq::Message] {
+        &self.lean_messages
     }
 
     #[must_use]
-    pub fn lean_signatures(&self) -> &[lean_multisig::Signature] {
+    pub fn lean_signatures(&self) -> &[lean_pq::xmss::Signature] {
         &self.lean_signatures
     }
 
     #[must_use]
-    pub fn lean_public_keys(&self) -> &[lean_multisig::PublicKey] {
+    pub fn lean_public_keys(&self) -> &[lean_pq::xmss::PublicKey] {
         &self.lean_public_keys
     }
 
@@ -1087,7 +1097,7 @@ impl FixtureSet {
         let expected_len = self.len();
         ensure!(
             [
-                self.lean_claims.len(),
+                self.lean_messages.len(),
                 self.lean_signatures.len(),
                 self.lean_public_keys.len(),
                 self.bls.len(),
@@ -1098,10 +1108,10 @@ impl FixtureSet {
         );
 
         for index in 0..expected_len {
-            lean_multisig::verify(
+            lean_pq::xmss::verify(
+                &self.lean_public_keys[index],
+                &self.lean_messages[index],
                 &self.lean_signatures[index],
-                std::slice::from_ref(&self.lean_public_keys[index]),
-                &self.lean_claims[index],
             )
             .with_context(|| format!("XMSS signature failed validation for signer {index}"))?;
         }
@@ -1120,4 +1130,16 @@ fn indexed_bytes(index: usize) -> Result<[u8; 32]> {
     let mut bytes = [0; 32];
     bytes[24..].copy_from_slice(&value.to_be_bytes());
     Ok(bytes)
+}
+
+/// A leanXMSS seed of `domain`, binding the message index and the key index.
+fn lean_seed(
+    domain: u8,
+    message_index: usize,
+    index: usize,
+) -> Result<[u8; lean_pq::xmss::SEED_LEN]> {
+    let mut seed = indexed_bytes(index)?;
+    seed[0] = domain;
+    seed[8..16].copy_from_slice(&u64::try_from(message_index)?.to_be_bytes());
+    Ok(seed)
 }

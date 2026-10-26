@@ -24,11 +24,12 @@ jobs:
       - name: Check formatting
         run: cargo fmt --check
 
+      # Debug builds of leanVM prove roughly 30x slower, so tests build in release.
       - name: Test Rust bindings
-        run: cargo test -p lean-multisig
+        run: cargo test --release -p lean-pq
 
       - name: Lint Rust bindings
-        run: cargo clippy -p lean-multisig --all-targets -- -D warnings
+        run: cargo clippy --release -p lean-pq --all-targets -- -D warnings
 
   test:
     name: ${{ matrix.os }} / py${{ matrix.python }}
@@ -71,7 +72,7 @@ jobs:
         working-directory: bindings/python
 
       - name: Check type stubs match runtime
-        run: uv run --extra dev python -m mypy.stubtest py_lean_multisig --allowlist stubtest_allowlist.txt
+        run: uv run --extra dev python -m mypy.stubtest py_lean_pq --allowlist stubtest_allowlist.txt
         working-directory: bindings/python
 
   java:
@@ -92,7 +93,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Test the native ABI
-        run: cargo test -p lean-multisig-native --test abi
+        run: cargo test --release -p lean-pq-native --test abi
 
       - name: Test Java bindings
         run: gradle -p bindings/java test
@@ -155,7 +156,7 @@ jobs:
       - name: Stage static native bridge
         run: |
           sh bindings/native/scripts/stage-static.sh ${{ matrix.platform.target }} bindings/zig/.native
-          cmp bindings/native/include/lean_multisig_native.h bindings/zig/include/lean_multisig_native.h
+          cmp bindings/native/include/lean_pq_native.h bindings/zig/include/lean_pq_native.h
 
       - name: Install Zig 0.16.0 for Zig tests
         uses: mlugg/setup-zig@v2
@@ -183,7 +184,7 @@ jobs:
             rust_targets: aarch64-unknown-linux-gnu
             target: aarch64-unknown-linux-gnu
             archive_dir: bindings/go/internal/native/linux_arm64
-            go_test_command: CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="zig cc -target aarch64-linux-gnu" go test -c -o /tmp/leanmultisig-arm64.test .
+            go_test_command: CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="zig cc -target aarch64-linux-gnu" go test -c -o /tmp/leanpq-arm64.test .
           - name: macOS universal
             runner: macos-14
             rust_targets: x86_64-apple-darwin aarch64-apple-darwin
@@ -222,11 +223,11 @@ jobs:
       - name: Stage static native bridge
         run: |
           sh bindings/native/scripts/stage-static.sh ${{ matrix.platform.target }} ${{ matrix.platform.archive_dir }}
-          cmp bindings/native/include/lean_multisig_native.h bindings/go/internal/native/include/lean_multisig_native.h
+          cmp bindings/native/include/lean_pq_native.h bindings/go/internal/native/include/lean_pq_native.h
 
       - name: Check universal macOS archive slices
         if: matrix.platform.target == 'universal2-apple-darwin'
-        run: lipo bindings/go/internal/native/darwin_universal/liblean_multisig_native.a -verify_arch arm64 x86_64
+        run: lipo bindings/go/internal/native/darwin_universal/liblean_pq_native.a -verify_arch arm64 x86_64
 
       - name: Test Go bindings
         run: ${{ matrix.platform.go_test_command }}

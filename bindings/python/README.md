@@ -1,9 +1,18 @@
-# py-lean-multisig
+# py-lean-pq
 
-Python bindings for the safer `lean_multisig_api` facade from leanVM. It keeps
-the recursion topology, proving parameters, and representation choices inside
-the library. Applications carry the claims and expected signer sets that
-authorize each signature.
+Python bindings for leanVM's post-quantum signatures, built on the safe Rust
+facade `lean-pq`:
+
+- **leanXMSS**: stateful hash-based signatures, `2^32` leaf indices per key.
+- **leanSPHINCS**: stateless hash-based signatures.
+- **Aggregation**: a recursive proof that every listed public key signed its
+  message. Aggregates can be combined into larger aggregates.
+
+Public keys and messages are 32 bytes. Signatures are plain fixed-length
+`bytes` (2404 for leanXMSS, 4276 for leanSPHINCS). Errors raise
+`LeanPqError`; a seed, message, public key, or signature of the wrong length
+raises `ValueError`. Key generation, signing, verification, aggregation, and
+aggregate decoding release the GIL.
 
 Requires Python >= 3.11. Wheels are built for Linux (x86_64, aarch64; glibc +
 musl) and macOS arm64.
@@ -11,84 +20,83 @@ musl) and macOS arm64.
 ## Install
 
 ```bash
-pip install py-lean-multisig
+pip install py-lean-pq
 ```
 
-## Claims and signatures
-
-`Claim` binds a 32-byte message to a slot. A `Signature` always knows its
-claim; its serialized form deliberately omits both the claim and signer set,
-which must come from the surrounding protocol when it is restored.
+## leanXMSS
 
 ```python
-import py_lean_multisig as lm
+import py_lean_pq as lpq
 
-claim = lm.Claim(b"\x42" * 32, 5)
-key = lm.SecretKey.from_seed(b"\x01" * 32, 0, 1023)
-signature = key.sign(claim)
+key = lpq.XmssSecretKey.from_seed(b"\x01" * 32)  # or XmssSecretKey.generate()
+message = b"\x42" * 32
 
-# Verify against the exact expected set—checking the proof alone is not enough.
-lm.verify(signature, [key.public_key], claim)
+key.prepare(5)  # optional: build the bottom tree for leaf 5 ahead of time
+signature = key.sign(message, 5)
+lpq.xmss_verify(key.public_key, message, signature)  # raises LeanPqError if invalid
 
-# Supply external context when decoding the wire value.
-restored = lm.Signature.from_bytes(signature.to_bytes(), claim, [key.public_key])
-lm.verify(restored, [key.public_key], claim)
+restored = lpq.XmssSecretKey.from_bytes(key.to_bytes())
 ```
 
-XMSS keys are stateful: never sign different messages at the same slot. Persist
-your own durable high-water slot alongside `SecretKey.to_bytes()` and advance it
+leanXMSS keys are stateful: never sign two different messages at the same leaf
+index. Persist your own durable high-water leaf index alongside
+`XmssSecretKey.to_bytes()` (the key's seed, secret material) and advance it
 before publishing a signature.
 
-## Single-claim aggregation
+## leanSPHINCS
 
-Call `setup()` once before aggregating, decoding an aggregate, or verifying an
-aggregate. It is safe to call repeatedly.
-
-```python
-import py_lean_multisig as lm
-
-lm.setup()
-claim = lm.Claim(b"\x42" * 32, 5)
-keys = [lm.SecretKey.from_seed(bytes([i]) * 32, 0, 1023) for i in (1, 2)]
-
-aggregate = lm.aggregate([key.sign(claim) for key in keys], claim)
-expected = [key.public_key for key in keys]
-lm.verify(aggregate, expected, claim)
-```
-
-Raw and already aggregated `Signature` values can be mixed in `aggregate`; no
-parallel public-key list or child-proof topology is exposed.
-
-## Multi-claim proofs
-
-`merge_claims` groups signatures by claim and produces one proof. Each expected
-claim has its own explicitly authorized signer set.
+A key keeps one subtree of height `kept_height` (at most 26), trading signing
+capacity for key generation time.
 
 ```python
-groups = [lm.ClaimSigners(claim, expected)]
-proof = lm.merge_claims([aggregate])
-lm.verify_claims(proof, groups)
+key = lpq.SphincsSecretKey.from_seed(b"\x02" * 32, 4)  # or SphincsSecretKey.generate(4)
+signature = key.sign(message)
+lpq.sphincs_verify(key.public_key, message, signature)
 
-restored = lm.MultiClaimProof.from_bytes(proof.to_bytes(), groups)
-lm.verify_claims(restored, groups)
+restored = lpq.SphincsSecretKey.from_bytes(key.to_bytes())
+assert restored.kept_height == 4
 ```
 
-## Breaking change
+## Aggregation
 
-This replaces the legacy `keygen`, `Prover`, `Verifier`, `PublicKey`, and
-`AggregatedSignature` API. The replacement makes the claim and expected signer
-set explicit, carries signer context with signatures in memory, and chooses
-aggregation tuning internally.
+`aggregate` proves raw `(public_key, message, signature)` tuples of either
+scheme together with up to 16 child aggregates. The result's claims are the
+union of its inputs' claims. Raw signatures are verified before proving.
+
+```python
+xmss_key = lpq.XmssSecretKey.from_seed(b"\x05" * 32)
+sphincs_key = lpq.SphincsSecretKey.from_seed(b"\x06" * 32, 4)
+first, second = b"\x11" * 32, b"\x22" * 32
+
+left = lpq.aggregate(xmss=[(xmss_key.public_key, first, xmss_key.sign(first, 0))])
+right = lpq.aggregate(sphincs=[(sphincs_key.public_key, second, sphincs_key.sign(second))])
+root = lpq.aggregate(
+    children=[left, right],
+    xmss=[(xmss_key.public_key, second, xmss_key.sign(second, 1))],
+)
+
+received = lpq.Aggregate.from_bytes(root.to_bytes())  # decodes and verifies
+assert received.sphincs_claims == [(sphincs_key.public_key, second)]
+```
+
+Every `Aggregate` value has been proven or verified. It attests the claims it
+lists, not the claims you wanted: compare `xmss_claims` and `sphincs_claims`
+(sorted lists of `(public_key, message)`) against what you expect.
+
+`aggregate` and `Aggregate.from_bytes` build the aggregation guest on first
+use; call `setup()` to pay that cost earlier. It is safe to call repeatedly.
+Proving is serialized process-wide and takes seconds and over a gigabyte of
+memory.
 
 ## Development
 
 ```bash
 uv run --extra dev maturin develop --release
 uv run --extra dev pytest tests/ -v
-uv run --extra dev python -m mypy.stubtest py_lean_multisig --allowlist stubtest_allowlist.txt
+uv run --extra dev python -m mypy.stubtest py_lean_pq --allowlist stubtest_allowlist.txt
 ```
 
-After Rust source changes, re-run `uv run --extra dev maturin develop --release`.
+Always build in release: debug builds of leanVM prove roughly 30x slower.
 
 ## License
 

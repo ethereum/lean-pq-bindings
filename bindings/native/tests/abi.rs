@@ -1,39 +1,176 @@
-use lean_multisig_native::{
-    lms_buffer_free, lms_secret_key_destroy, lms_secret_key_from_seed, lms_secret_key_sign,
-    lms_setup, lms_signature_destroy, lms_signature_to_bytes, LmsBuffer,
-};
+use lean_pq_native::*;
 use std::ptr;
 
 const OK: i32 = 0;
+const ERROR: i32 = 1;
+
+unsafe fn take(buffer: LpqBuffer) -> Vec<u8> {
+    let bytes = std::slice::from_raw_parts(buffer.data, buffer.len).to_vec();
+    lpq_buffer_free(buffer.data, buffer.len);
+    bytes
+}
 
 #[test]
-fn shared_native_abi_signs_and_serializes_a_claim() {
+fn native_abi_signs_verifies_and_aggregates() {
     std::thread::Builder::new()
         .name("native-abi-test".to_owned())
         .stack_size(32 * 1024 * 1024)
         .spawn(|| unsafe {
-            assert_eq!(lms_setup(), OK);
+            assert_eq!(lpq_setup(), OK);
+            let message = [42u8; 32];
+            let other = [43u8; 32];
 
-            let mut key = ptr::null_mut();
+            // leanXMSS
+            let mut xmss_key = ptr::null_mut();
             assert_eq!(
-                lms_secret_key_from_seed([7; 32].as_ptr(), 32, 100, 115, &mut key),
+                lpq_xmss_secret_key_from_bytes([7; 32].as_ptr(), 32, &mut xmss_key),
                 OK
             );
-
-            let mut signature = ptr::null_mut();
+            let mut buffer = LpqBuffer::default();
+            assert_eq!(lpq_xmss_secret_key_to_bytes(xmss_key, &mut buffer), OK);
+            assert_eq!(take(buffer), [7; 32]);
+            let mut buffer = LpqBuffer::default();
+            assert_eq!(lpq_xmss_secret_key_public_key(xmss_key, &mut buffer), OK);
+            let xmss_pk = take(buffer);
+            assert_eq!(xmss_pk.len(), 32);
+            assert_eq!(lpq_xmss_secret_key_prepare(xmss_key, 5), OK);
+            let mut buffer = LpqBuffer::default();
             assert_eq!(
-                lms_secret_key_sign(key, [42; 32].as_ptr(), 32, 100, &mut signature),
+                lpq_xmss_secret_key_sign(xmss_key, message.as_ptr(), 32, 5, &mut buffer),
                 OK
             );
+            let xmss_sig = take(buffer);
+            assert_eq!(xmss_sig.len(), 2404);
+            assert_eq!(
+                lpq_xmss_verify(
+                    xmss_pk.as_ptr(),
+                    32,
+                    message.as_ptr(),
+                    32,
+                    xmss_sig.as_ptr(),
+                    xmss_sig.len()
+                ),
+                OK
+            );
+            assert_eq!(
+                lpq_xmss_verify(
+                    xmss_pk.as_ptr(),
+                    32,
+                    other.as_ptr(),
+                    32,
+                    xmss_sig.as_ptr(),
+                    xmss_sig.len()
+                ),
+                ERROR
+            );
+            let mut error = LpqBuffer::default();
+            assert_eq!(lpq_last_error(&mut error), OK);
+            assert!(!take(error).is_empty());
+            lpq_xmss_secret_key_destroy(xmss_key);
 
-            let mut bytes = LmsBuffer::default();
-            assert_eq!(lms_signature_to_bytes(signature, &mut bytes), OK);
-            assert!(!bytes.data.is_null());
-            assert!(bytes.len > 0);
+            // leanSPHINCS
+            let mut sphincs_key = ptr::null_mut();
+            assert_eq!(
+                lpq_sphincs_secret_key_from_seed([9; 32].as_ptr(), 32, 3, &mut sphincs_key),
+                OK
+            );
+            let mut kept_height = 0;
+            assert_eq!(
+                lpq_sphincs_secret_key_kept_height(sphincs_key, &mut kept_height),
+                OK
+            );
+            assert_eq!(kept_height, 3);
+            let mut buffer = LpqBuffer::default();
+            assert_eq!(
+                lpq_sphincs_secret_key_to_bytes(sphincs_key, &mut buffer),
+                OK
+            );
+            let sphincs_sk = take(buffer);
+            assert_eq!(sphincs_sk.len(), 33);
+            let mut restored = ptr::null_mut();
+            assert_eq!(
+                lpq_sphincs_secret_key_from_bytes(
+                    sphincs_sk.as_ptr(),
+                    sphincs_sk.len(),
+                    &mut restored
+                ),
+                OK
+            );
+            lpq_sphincs_secret_key_destroy(restored);
+            let mut buffer = LpqBuffer::default();
+            assert_eq!(
+                lpq_sphincs_secret_key_public_key(sphincs_key, &mut buffer),
+                OK
+            );
+            let sphincs_pk = take(buffer);
+            let mut buffer = LpqBuffer::default();
+            assert_eq!(
+                lpq_sphincs_secret_key_sign(sphincs_key, message.as_ptr(), 32, &mut buffer),
+                OK
+            );
+            let sphincs_sig = take(buffer);
+            assert_eq!(sphincs_sig.len(), 4276);
+            assert_eq!(
+                lpq_sphincs_verify(
+                    sphincs_pk.as_ptr(),
+                    32,
+                    message.as_ptr(),
+                    32,
+                    sphincs_sig.as_ptr(),
+                    sphincs_sig.len()
+                ),
+                OK
+            );
+            assert_eq!(
+                lpq_sphincs_verify(
+                    sphincs_pk.as_ptr(),
+                    32,
+                    other.as_ptr(),
+                    32,
+                    sphincs_sig.as_ptr(),
+                    sphincs_sig.len()
+                ),
+                ERROR
+            );
+            lpq_sphincs_secret_key_destroy(sphincs_key);
 
-            lms_buffer_free(bytes.data, bytes.len);
-            lms_signature_destroy(signature);
-            lms_secret_key_destroy(key);
+            // Aggregate one record of each scheme.
+            let xmss_record = [&xmss_pk[..], &message, &xmss_sig].concat();
+            let sphincs_record = [&sphincs_pk[..], &message, &sphincs_sig].concat();
+            let mut aggregate = ptr::null_mut();
+            assert_eq!(
+                lpq_aggregate_create(
+                    ptr::null(),
+                    0,
+                    xmss_record.as_ptr(),
+                    1,
+                    sphincs_record.as_ptr(),
+                    1,
+                    &mut aggregate
+                ),
+                OK
+            );
+            let mut buffer = LpqBuffer::default();
+            assert_eq!(lpq_aggregate_to_bytes(aggregate, &mut buffer), OK);
+            let aggregate_bytes = take(buffer);
+            lpq_aggregate_destroy(aggregate);
+
+            let mut decoded = ptr::null_mut();
+            assert_eq!(
+                lpq_aggregate_from_bytes(
+                    aggregate_bytes.as_ptr(),
+                    aggregate_bytes.len(),
+                    &mut decoded
+                ),
+                OK
+            );
+            let mut buffer = LpqBuffer::default();
+            assert_eq!(lpq_aggregate_xmss_claims(decoded, &mut buffer), OK);
+            assert_eq!(take(buffer), [&xmss_pk[..], &message].concat());
+            let mut buffer = LpqBuffer::default();
+            assert_eq!(lpq_aggregate_sphincs_claims(decoded, &mut buffer), OK);
+            assert_eq!(take(buffer), [&sphincs_pk[..], &message].concat());
+            lpq_aggregate_destroy(decoded);
         })
         .expect("test thread starts")
         .join()

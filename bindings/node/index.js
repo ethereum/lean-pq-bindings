@@ -70,13 +70,13 @@ function requireNative() {
   } else if (process.platform === 'android') {
     if (process.arch === 'arm64') {
       try {
-        return require('./lean_multisig_node.android-arm64.node')
+        return require('./lean_pq_node.android-arm64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@ethereum/lean-multisig-android-arm64')
-        const bindingPackageVersion = require('@ethereum/lean-multisig-android-arm64/package.json').version
+        const binding = require('@ethereum/lean-pq-android-arm64')
+        const bindingPackageVersion = require('@ethereum/lean-pq-android-arm64/package.json').version
         if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -86,13 +86,13 @@ function requireNative() {
       }
     } else if (process.arch === 'arm') {
       try {
-        return require('./lean_multisig_node.android-arm-eabi.node')
+        return require('./lean_pq_node.android-arm-eabi.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@ethereum/lean-multisig-android-arm-eabi')
-        const bindingPackageVersion = require('@ethereum/lean-multisig-android-arm-eabi/package.json').version
+        const binding = require('@ethereum/lean-pq-android-arm-eabi')
+        const bindingPackageVersion = require('@ethereum/lean-pq-android-arm-eabi/package.json').version
         if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -107,13 +107,13 @@ function requireNative() {
     if (process.arch === 'x64') {
       if ((process.config && process.config.variables && process.config.variables.shlib_suffix === 'dll.a') || (process.config && process.config.variables && process.config.variables.node_target_type === 'shared_library')) {
         try {
-        return require('./lean_multisig_node.win32-x64-gnu.node')
+        return require('./lean_pq_node.win32-x64-gnu.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@ethereum/lean-multisig-win32-x64-gnu')
-        const bindingPackageVersion = require('@ethereum/lean-multisig-win32-x64-gnu/package.json').version
+        const binding = require('@ethereum/lean-pq-win32-x64-gnu')
+        const bindingPackageVersion = require('@ethereum/lean-pq-win32-x64-gnu/package.json').version
         if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -123,13 +123,13 @@ function requireNative() {
       }
       } else {
         try {
-        return require('./lean_multisig_node.win32-x64-msvc.node')
+        return require('./lean_pq_node.win32-x64-msvc.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@ethereum/lean-multisig-win32-x64-msvc')
-        const bindingPackageVersion = require('@ethereum/lean-multisig-win32-x64-msvc/package.json').version
+        const binding = require('@ethereum/lean-pq-win32-x64-msvc')
+        const bindingPackageVersion = require('@ethereum/lean-pq-win32-x64-msvc/package.json').version
         if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -140,13 +140,13 @@ function requireNative() {
       }
     } else if (process.arch === 'ia32') {
       try {
-        return require('./lean_multisig_node.win32-ia32-msvc.node')
+        return require('./lean_pq_node.win32-ia32-msvc.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@ethereum/lean-multisig-win32-ia32-msvc')
-        const bindingPackageVersion = require('@ethereum/lean-multisig-win32-ia32-msvc/package.json').version
+        const binding = require('@ethereum/lean-pq-win32-ia32-msvc')
+        const bindingPackageVersion = require('@ethereum/lean-pq-win32-ia32-msvc/package.json').version
         if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -156,13 +156,13 @@ function requireNative() {
       }
     } else if (process.arch === 'arm64') {
       try {
-        return require('./lean_multisig_node.win32-arm64-msvc.node')
+        return require('./lean_pq_node.win32-arm64-msvc.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@ethereum/lean-multisig-win32-arm64-msvc')
-        const bindingPackageVersion = require('@ethereum/lean-multisig-win32-arm64-msvc/package.json').version
+        const binding = require('@ethereum/lean-pq-win32-arm64-msvc')
+        const bindingPackageVersion = require('@ethereum/lean-pq-win32-arm64-msvc/package.json').version
         if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -175,13 +175,13 @@ function requireNative() {
     }
   } else if (process.platform === 'darwin') {
     try {
-      return require('./lean_multisig_node.darwin-universal.node')
+      return require('./lean_pq_node.darwin-universal.node')
     } catch (e) {
       loadErrors.push(e)
     }
     try {
-      const binding = require('@ethereum/lean-multisig-darwin-universal')
-      const bindingPackageVersion = require('@ethereum/lean-multisig-darwin-universal/package.json').version
+      const binding = require('@ethereum/lean-pq-darwin-universal')
+      const bindingPackageVersion = require('@ethereum/lean-pq-darwin-universal/package.json').version
       if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
         throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
       }
@@ -191,13 +191,13 @@ function requireNative() {
     }
     if (process.arch === 'x64') {
       try {
-        return require('./lean_multisig_node.darwin-x64.node')
+        return require('./lean_pq_node.darwin-x64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@ethereum/lean-multisig-darwin-x64')
-        const bindingPackageVersion = require('@ethereum/lean-multisig-darwin-x64/package.json').version
+        const binding = require('@ethereum/lean-pq-darwin-x64')
+        const bindingPackageVersion = require('@ethereum/lean-pq-darwin-x64/package.json').version
         if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -207,13 +207,13 @@ function requireNative() {
       }
     } else if (process.arch === 'arm64') {
       try {
-        return require('./lean_multisig_node.darwin-arm64.node')
+        return require('./lean_pq_node.darwin-arm64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@ethereum/lean-multisig-darwin-arm64')
-        const bindingPackageVersion = require('@ethereum/lean-multisig-darwin-arm64/package.json').version
+        const binding = require('@ethereum/lean-pq-darwin-arm64')
+        const bindingPackageVersion = require('@ethereum/lean-pq-darwin-arm64/package.json').version
         if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -227,13 +227,13 @@ function requireNative() {
   } else if (process.platform === 'freebsd') {
     if (process.arch === 'x64') {
       try {
-        return require('./lean_multisig_node.freebsd-x64.node')
+        return require('./lean_pq_node.freebsd-x64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@ethereum/lean-multisig-freebsd-x64')
-        const bindingPackageVersion = require('@ethereum/lean-multisig-freebsd-x64/package.json').version
+        const binding = require('@ethereum/lean-pq-freebsd-x64')
+        const bindingPackageVersion = require('@ethereum/lean-pq-freebsd-x64/package.json').version
         if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -243,13 +243,13 @@ function requireNative() {
       }
     } else if (process.arch === 'arm64') {
       try {
-        return require('./lean_multisig_node.freebsd-arm64.node')
+        return require('./lean_pq_node.freebsd-arm64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@ethereum/lean-multisig-freebsd-arm64')
-        const bindingPackageVersion = require('@ethereum/lean-multisig-freebsd-arm64/package.json').version
+        const binding = require('@ethereum/lean-pq-freebsd-arm64')
+        const bindingPackageVersion = require('@ethereum/lean-pq-freebsd-arm64/package.json').version
         if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -264,13 +264,13 @@ function requireNative() {
     if (process.arch === 'x64') {
       if (isMusl()) {
         try {
-          return require('./lean_multisig_node.linux-x64-musl.node')
+          return require('./lean_pq_node.linux-x64-musl.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('@ethereum/lean-multisig-linux-x64-musl')
-          const bindingPackageVersion = require('@ethereum/lean-multisig-linux-x64-musl/package.json').version
+          const binding = require('@ethereum/lean-pq-linux-x64-musl')
+          const bindingPackageVersion = require('@ethereum/lean-pq-linux-x64-musl/package.json').version
           if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -280,13 +280,13 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./lean_multisig_node.linux-x64-gnu.node')
+          return require('./lean_pq_node.linux-x64-gnu.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('@ethereum/lean-multisig-linux-x64-gnu')
-          const bindingPackageVersion = require('@ethereum/lean-multisig-linux-x64-gnu/package.json').version
+          const binding = require('@ethereum/lean-pq-linux-x64-gnu')
+          const bindingPackageVersion = require('@ethereum/lean-pq-linux-x64-gnu/package.json').version
           if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -298,13 +298,13 @@ function requireNative() {
     } else if (process.arch === 'arm64') {
       if (isMusl()) {
         try {
-          return require('./lean_multisig_node.linux-arm64-musl.node')
+          return require('./lean_pq_node.linux-arm64-musl.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('@ethereum/lean-multisig-linux-arm64-musl')
-          const bindingPackageVersion = require('@ethereum/lean-multisig-linux-arm64-musl/package.json').version
+          const binding = require('@ethereum/lean-pq-linux-arm64-musl')
+          const bindingPackageVersion = require('@ethereum/lean-pq-linux-arm64-musl/package.json').version
           if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -314,13 +314,13 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./lean_multisig_node.linux-arm64-gnu.node')
+          return require('./lean_pq_node.linux-arm64-gnu.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('@ethereum/lean-multisig-linux-arm64-gnu')
-          const bindingPackageVersion = require('@ethereum/lean-multisig-linux-arm64-gnu/package.json').version
+          const binding = require('@ethereum/lean-pq-linux-arm64-gnu')
+          const bindingPackageVersion = require('@ethereum/lean-pq-linux-arm64-gnu/package.json').version
           if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -332,13 +332,13 @@ function requireNative() {
     } else if (process.arch === 'arm') {
       if (isMusl()) {
         try {
-          return require('./lean_multisig_node.linux-arm-musleabihf.node')
+          return require('./lean_pq_node.linux-arm-musleabihf.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('@ethereum/lean-multisig-linux-arm-musleabihf')
-          const bindingPackageVersion = require('@ethereum/lean-multisig-linux-arm-musleabihf/package.json').version
+          const binding = require('@ethereum/lean-pq-linux-arm-musleabihf')
+          const bindingPackageVersion = require('@ethereum/lean-pq-linux-arm-musleabihf/package.json').version
           if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -348,13 +348,13 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./lean_multisig_node.linux-arm-gnueabihf.node')
+          return require('./lean_pq_node.linux-arm-gnueabihf.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('@ethereum/lean-multisig-linux-arm-gnueabihf')
-          const bindingPackageVersion = require('@ethereum/lean-multisig-linux-arm-gnueabihf/package.json').version
+          const binding = require('@ethereum/lean-pq-linux-arm-gnueabihf')
+          const bindingPackageVersion = require('@ethereum/lean-pq-linux-arm-gnueabihf/package.json').version
           if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -366,13 +366,13 @@ function requireNative() {
     } else if (process.arch === 'loong64') {
       if (isMusl()) {
         try {
-          return require('./lean_multisig_node.linux-loong64-musl.node')
+          return require('./lean_pq_node.linux-loong64-musl.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('@ethereum/lean-multisig-linux-loong64-musl')
-          const bindingPackageVersion = require('@ethereum/lean-multisig-linux-loong64-musl/package.json').version
+          const binding = require('@ethereum/lean-pq-linux-loong64-musl')
+          const bindingPackageVersion = require('@ethereum/lean-pq-linux-loong64-musl/package.json').version
           if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -382,13 +382,13 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./lean_multisig_node.linux-loong64-gnu.node')
+          return require('./lean_pq_node.linux-loong64-gnu.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('@ethereum/lean-multisig-linux-loong64-gnu')
-          const bindingPackageVersion = require('@ethereum/lean-multisig-linux-loong64-gnu/package.json').version
+          const binding = require('@ethereum/lean-pq-linux-loong64-gnu')
+          const bindingPackageVersion = require('@ethereum/lean-pq-linux-loong64-gnu/package.json').version
           if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -400,13 +400,13 @@ function requireNative() {
     } else if (process.arch === 'riscv64') {
       if (isMusl()) {
         try {
-          return require('./lean_multisig_node.linux-riscv64-musl.node')
+          return require('./lean_pq_node.linux-riscv64-musl.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('@ethereum/lean-multisig-linux-riscv64-musl')
-          const bindingPackageVersion = require('@ethereum/lean-multisig-linux-riscv64-musl/package.json').version
+          const binding = require('@ethereum/lean-pq-linux-riscv64-musl')
+          const bindingPackageVersion = require('@ethereum/lean-pq-linux-riscv64-musl/package.json').version
           if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -416,13 +416,13 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./lean_multisig_node.linux-riscv64-gnu.node')
+          return require('./lean_pq_node.linux-riscv64-gnu.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('@ethereum/lean-multisig-linux-riscv64-gnu')
-          const bindingPackageVersion = require('@ethereum/lean-multisig-linux-riscv64-gnu/package.json').version
+          const binding = require('@ethereum/lean-pq-linux-riscv64-gnu')
+          const bindingPackageVersion = require('@ethereum/lean-pq-linux-riscv64-gnu/package.json').version
           if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -433,13 +433,13 @@ function requireNative() {
       }
     } else if (process.arch === 'ppc64') {
       try {
-        return require('./lean_multisig_node.linux-ppc64-gnu.node')
+        return require('./lean_pq_node.linux-ppc64-gnu.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@ethereum/lean-multisig-linux-ppc64-gnu')
-        const bindingPackageVersion = require('@ethereum/lean-multisig-linux-ppc64-gnu/package.json').version
+        const binding = require('@ethereum/lean-pq-linux-ppc64-gnu')
+        const bindingPackageVersion = require('@ethereum/lean-pq-linux-ppc64-gnu/package.json').version
         if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -449,13 +449,13 @@ function requireNative() {
       }
     } else if (process.arch === 's390x') {
       try {
-        return require('./lean_multisig_node.linux-s390x-gnu.node')
+        return require('./lean_pq_node.linux-s390x-gnu.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@ethereum/lean-multisig-linux-s390x-gnu')
-        const bindingPackageVersion = require('@ethereum/lean-multisig-linux-s390x-gnu/package.json').version
+        const binding = require('@ethereum/lean-pq-linux-s390x-gnu')
+        const bindingPackageVersion = require('@ethereum/lean-pq-linux-s390x-gnu/package.json').version
         if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -469,13 +469,13 @@ function requireNative() {
   } else if (process.platform === 'openharmony') {
     if (process.arch === 'arm64') {
       try {
-        return require('./lean_multisig_node.openharmony-arm64.node')
+        return require('./lean_pq_node.openharmony-arm64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@ethereum/lean-multisig-openharmony-arm64')
-        const bindingPackageVersion = require('@ethereum/lean-multisig-openharmony-arm64/package.json').version
+        const binding = require('@ethereum/lean-pq-openharmony-arm64')
+        const bindingPackageVersion = require('@ethereum/lean-pq-openharmony-arm64/package.json').version
         if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -485,13 +485,13 @@ function requireNative() {
       }
     } else if (process.arch === 'x64') {
       try {
-        return require('./lean_multisig_node.openharmony-x64.node')
+        return require('./lean_pq_node.openharmony-x64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@ethereum/lean-multisig-openharmony-x64')
-        const bindingPackageVersion = require('@ethereum/lean-multisig-openharmony-x64/package.json').version
+        const binding = require('@ethereum/lean-pq-openharmony-x64')
+        const bindingPackageVersion = require('@ethereum/lean-pq-openharmony-x64/package.json').version
         if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -501,13 +501,13 @@ function requireNative() {
       }
     } else if (process.arch === 'arm') {
       try {
-        return require('./lean_multisig_node.openharmony-arm.node')
+        return require('./lean_pq_node.openharmony-arm.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@ethereum/lean-multisig-openharmony-arm')
-        const bindingPackageVersion = require('@ethereum/lean-multisig-openharmony-arm/package.json').version
+        const binding = require('@ethereum/lean-pq-openharmony-arm')
+        const bindingPackageVersion = require('@ethereum/lean-pq-openharmony-arm/package.json').version
         if (bindingPackageVersion !== '0.0.0-dev' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -623,10 +623,10 @@ if (!nativeBinding || forceWasi) {
     let candidateError = null
     let candidateFailed = false
     try {
-      candidateError = __napiWasiResolveCandidate('./lean_multisig_node.wasi.cjs', false, ["./lean_multisig_node.wasm32-wasi.debug.wasm","./lean_multisig_node.wasm32-wasi.wasm"])
+      candidateError = __napiWasiResolveCandidate('./lean_pq_node.wasi.cjs', false, ["./lean_pq_node.wasm32-wasi.debug.wasm","./lean_pq_node.wasm32-wasi.wasm"])
       candidateFailed = candidateError !== null
       if (!candidateFailed) {
-        wasiBinding = require('./lean_multisig_node.wasi.cjs')
+        wasiBinding = require('./lean_pq_node.wasi.cjs')
         nativeBinding = wasiBinding
         wasiBindingLoaded = true
       }
@@ -643,16 +643,16 @@ if (!nativeBinding || forceWasi) {
     let candidateError = null
     let candidateFailed = false
     try {
-      candidateError = __napiWasiResolveCandidate('@ethereum/lean-multisig-wasm32-wasi', true, undefined)
+      candidateError = __napiWasiResolveCandidate('@ethereum/lean-pq-wasm32-wasi', true, undefined)
       candidateFailed = candidateError !== null
       if (!candidateFailed) {
         if (process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-          const bindingPackageVersion = require('@ethereum/lean-multisig-wasm32-wasi/package.json').version
+          const bindingPackageVersion = require('@ethereum/lean-pq-wasm32-wasi/package.json').version
           if (bindingPackageVersion !== '0.0.0-dev') {
             throw new Error(`WASI binding package version mismatch, expected 0.0.0-dev but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
         }
-        wasiBinding = require('@ethereum/lean-multisig-wasm32-wasi')
+        wasiBinding = require('@ethereum/lean-pq-wasm32-wasi')
         nativeBinding = wasiBinding
         wasiBindingLoaded = true
       }
@@ -700,18 +700,17 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
-module.exports.Claim = nativeBinding.Claim
-module.exports.ClaimSigners = nativeBinding.ClaimSigners
-module.exports.MultiClaimProof = nativeBinding.MultiClaimProof
-module.exports.SecretKey = nativeBinding.SecretKey
-module.exports.Signature = nativeBinding.Signature
+module.exports.Aggregate = nativeBinding.Aggregate
+module.exports.SphincsSecretKey = nativeBinding.SphincsSecretKey
+module.exports.XmssSecretKey = nativeBinding.XmssSecretKey
 module.exports.aggregate = nativeBinding.aggregate
-module.exports.generateSecretKey = nativeBinding.generateSecretKey
-module.exports.mergeClaims = nativeBinding.mergeClaims
-module.exports.secretKeyFromBytes = nativeBinding.secretKeyFromBytes
-module.exports.secretKeyFromSeed = nativeBinding.secretKeyFromSeed
+module.exports.aggregateFromBytes = nativeBinding.aggregateFromBytes
+module.exports.generateSphincsSecretKey = nativeBinding.generateSphincsSecretKey
+module.exports.generateXmssSecretKey = nativeBinding.generateXmssSecretKey
 module.exports.setup = nativeBinding.setup
-module.exports.verifiedClaims = nativeBinding.verifiedClaims
-module.exports.verifiedSigners = nativeBinding.verifiedSigners
-module.exports.verify = nativeBinding.verify
-module.exports.verifyClaims = nativeBinding.verifyClaims
+module.exports.sphincsSecretKeyFromBytes = nativeBinding.sphincsSecretKeyFromBytes
+module.exports.sphincsSecretKeyFromSeed = nativeBinding.sphincsSecretKeyFromSeed
+module.exports.sphincsVerify = nativeBinding.sphincsVerify
+module.exports.xmssSecretKeyFromBytes = nativeBinding.xmssSecretKeyFromBytes
+module.exports.xmssSecretKeyFromSeed = nativeBinding.xmssSecretKeyFromSeed
+module.exports.xmssVerify = nativeBinding.xmssVerify

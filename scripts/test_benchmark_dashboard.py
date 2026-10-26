@@ -24,7 +24,8 @@ class DashboardBuilderTests(unittest.TestCase):
     def test_static_dashboard_is_latest_only_and_loads_both_suites(self):
         html = DASHBOARD_PATH.read_text(encoding="utf-8")
         lowered = html.lower()
-        self.assertIn("leanvm multisig vs lighthouse bls", lowered)
+        self.assertIn("leanvm leanxmss vs lighthouse bls", lowered)
+        self.assertNotIn("multisig", lowered)
         self.assertIn('id="fast-results"', html)
         self.assertIn('id="slow-results"', html)
         self.assertIn('loadSuite("fast", renderFast)', html)
@@ -51,7 +52,8 @@ class DashboardBuilderTests(unittest.TestCase):
         self.assertIn('id="explainer"', html)
         self.assertGreater(html.index('id="explainer"'), html.index('id="slow-results"'))
         self.assertIn("same-claim aggregation", lowered)
-        self.assertIn("identical message and slot", lowered)
+        self.assertIn("identical message", lowered)
+        self.assertNotIn("slot", lowered)
         self.assertIn("distinct-claim aggregation", lowered)
         self.assertIn("mixed-claim aggregation", lowered)
         self.assertIn("recursive same-claim aggregation", lowered)
@@ -105,11 +107,9 @@ class DashboardBuilderTests(unittest.TestCase):
     def test_dashboard_labels_proof_and_signature_sizes_explicitly(self):
         html = DASHBOARD_PATH.read_text(encoding="utf-8")
         self.assertIn("Serialized artifact sizes", html)
-        self.assertIn("LeanVM signing slots = ${Number(inputSize).toLocaleString()}", html)
         self.assertIn("LeanVM stored key", html)
         self.assertIn("BLS stored key", html)
-        self.assertIn("1,048,576 signing slots", html)
-        self.assertNotIn("secret_key_16_slots", html)
+        self.assertIn("2<sup>32</sup> leaf indices", html)
         self.assertIn("Raw signature", html)
         self.assertIn("LeanVM proof size", html)
         self.assertIn("BLS signature size", html)
@@ -329,7 +329,7 @@ class DashboardBuilderTests(unittest.TestCase):
             }
             key_creation = {
                 "workload": "key_creation",
-                "input_size": 1_048_576,
+                "input_size": 1,
                 "lean": {
                     "samples_ns": [31_000_000_000, 30_900_000_000, 31_100_000_000],
                     "median_ns": 31_000_000_000,
@@ -341,7 +341,7 @@ class DashboardBuilderTests(unittest.TestCase):
                     "operations_per_second": 1_000_000_000 / 446,
                 },
                 "lean_over_lighthouse": 31_000_000_000 / 446,
-                "lean_artifact_bytes": 40_212,
+                "lean_artifact_bytes": 32,
                 "lighthouse_artifact_bytes": 32,
             }
             supplemental = {
@@ -392,7 +392,6 @@ class DashboardBuilderTests(unittest.TestCase):
                         "runner_image_version=20260823.1",
                         "suite=slow",
                         "samples=3",
-                        "key_creation_slots=1048576",
                         "same_sizes=1,8,16,32,64,128,256,512",
                         "distinct_sizes=1,8,16",
                         "recursive_fan_ins=2",

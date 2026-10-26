@@ -12,7 +12,7 @@ Create a standalone `benchmarks/comparison` Rust crate and add it to the root Ca
 
 The crate will depend on:
 
-- The local `lean-multisig` Rust facade by path.
+- The local `lean-pq` Rust facade by path.
 - Lighthouse's `bls` package at commit `e423a66763bb1bd780492d635123f208d80c3538` from the `stable` branch.
 - Criterion for statistically sampled fast operations.
 - A small serialization dependency for machine-readable slow-runner results.

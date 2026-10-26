@@ -9,7 +9,7 @@
   ],
   "packages": {
     "bindings/python": {
-      "package-name": "py-lean-multisig",
+      "package-name": "py-lean-pq",
       "changelog-path": "CHANGELOG.md"
     }
   }

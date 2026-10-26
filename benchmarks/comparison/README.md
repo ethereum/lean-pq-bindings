@@ -1,12 +1,13 @@
-# leanMultisig and Lighthouse BLS benchmarks
+# leanVM leanXMSS and Lighthouse BLS benchmarks
 
-This crate compares the Rust `lean-multisig` binding with Lighthouse's `bls`
+This crate compares leanXMSS signatures and their leanVM aggregation, through the
+Rust `lean-pq` binding, with Lighthouse's `bls`
 wrapper pinned to revision
 `e423a66763bb1bd780492d635123f208d80c3538` and its default Supranational
 backend.
 
 These are performance comparisons, not claims of equivalent security
-semantics. leanMultisig aggregation generates zkVM proofs, whereas BLS
+semantics. leanVM aggregation generates zkVM proofs, whereas BLS
 aggregation combines elliptic-curve points.
 
 ## Fast paired-operation benchmarks
@@ -14,29 +15,29 @@ aggregation combines elliptic-curve points.
 Run the Criterion suite in release mode:
 
 ```bash
-cargo bench -p lean-multisig-comparison --bench comparison
+cargo bench -p lean-pq-comparison --bench comparison
 ```
 
 The fast suite compares paired signing, raw-signature serialization and
 deserialization, single-signature verification, and
 verification of `1,8,16` independent signer-and-message tuples. For the last
-workload, LeanVM verifies every raw XMSS signature and Lighthouse uses its
+workload, LeanVM verifies every raw leanXMSS signature and Lighthouse uses its
 production batch-verification API. Aggregate proof generation and verification
 are measured by the slow paired comparison below.
 
-## Large-key and slow paired comparison
+## Key-creation and slow paired comparison
 
-The practical default generates three LeanVM keys covering `2^20` signing slots
-and runs three proof samples at sizes `1,8,16` on both axes:
+The practical default generates three leanXMSS keys and runs three proof
+samples at sizes `1,8,16` on both axes:
 
 ```bash
-cargo run --release -p lean-multisig-comparison --bin slow_comparison
+cargo run --release -p lean-pq-comparison --bin slow_comparison
 ```
 
 Use independent options to opt into larger same-claim proofs:
 
 ```bash
-cargo run --release -p lean-multisig-comparison --bin slow_comparison -- \
+cargo run --release -p lean-pq-comparison --bin slow_comparison -- \
   --samples 3 \
   --same-sizes 32,64,128,256,512 \
   --distinct-sizes 1,8,16 \
@@ -46,34 +47,36 @@ cargo run --release -p lean-multisig-comparison --bin slow_comparison -- \
 
 `--mixed-claim-counts 8,16` adds mixed workloads with 512 raw signatures
 spread evenly across 8 claims (64 signers per claim) and 16 claims (32 signers
-per claim). LeanVM's `merge_claims` groups equal claims, builds each per-claim
-aggregate, and merges the results into one proof. The BLS side aggregates the
+per claim). LeanVM proves all 512 signatures, whatever their messages, in one
+`lean_pq::aggregate` call. The BLS side aggregates the
 same 512 signatures. For BLS verification, timing includes grouping and
 aggregating each claim's public keys before verifying the single aggregate
 against the requested number of message-and-aggregated-key pairs. Counts must
-be unique integers from 2 through 16 that divide 512 evenly.
+be unique integers greater than 1 that divide 512 evenly.
 
 `--recursive-fan-ins 2,4,8,16` measures LeanVM's proof-to-proof recursion.
 The runner first creates the maximum requested number of child proofs outside
-the timed region. Every child aggregates 512 distinct XMSS signers of the same
-claim (the identical message and slot), and signer sets are disjoint between
+the timed region. Every child aggregates 512 distinct leanXMSS signers of the
+same claim (the identical message), and signer sets are disjoint between
 children. Each timed sample then
 validates and combines the requested number of pre-built children into one new
 proof. The report records the merge median and serialized output-proof size for
 each fan-in. With `--warmup-proofs`, one additional merge at each fan-in runs
-before its recorded samples. Fan-ins must be unique integers from 2 through 16.
+before its recorded samples. Fan-ins must be unique integers from 2 through
+`lean_pq::MAX_CHILDREN` (16).
 The option is disabled by default for local runs because preparing the child
 proofs is slow.
 
-The `2^20`-slot key generation is always part of this runner. It reports the
-generation median and serialized key size beside Lighthouse BLS key generation;
-BLS keys do not precompute a slot-lifetime Merkle tree. The large LeanVM proof
-sweep can take substantial time and memory. It is never part of the default
-run. `--same-sizes` accepts unique positive sizes through
-512; `--distinct-sizes` accepts unique positive sizes through 16. Each option
-defaults independently to `1,8,16`. The backward-compatible `--sizes` option
-sets both axes, remains capped at 16, and cannot be combined with either
-specific size option.
+Key generation is always part of this runner. It times
+`xmss::SecretKey::from_seed` for one key beside Lighthouse BLS key generation
+and reports the serialized key size. A leanXMSS key covers `2^32` leaf indices
+and serializes to its 32-byte seed; key generation builds only its top tree,
+and each bottom tree is built the first time the key signs in it. The large
+LeanVM proof sweep can take substantial time and memory. It is never part of
+the default run. `--same-sizes` and `--distinct-sizes` accept unique positive
+sizes through 512. Each option defaults independently to `1,8,16`. The
+backward-compatible `--sizes` option sets both axes and cannot be combined
+with either specific size option.
 
 Add `--warmup-proofs` for steady-state proof measurements. Without it, no
 explicit Lean proof warm-up runs; recorded samples may include process-local
@@ -81,15 +84,24 @@ first-use effects. Add `--json PATH` to save the unchanged machine-readable
 report alongside the table printed to stdout. Add `--action-json PATH` to save
 an independent `customSmallerIsBetter` export for optional external consumers;
 the two output paths must resolve to different files. The current CI dashboard
-does not use this export. Fixture setup, post-timing correctness checks, and the
-Lean input clone performed immediately before aggregation are outside the timed
-region. Lighthouse operations are calibrated in batches of at least 10 ms and
+does not use this export. Fixture setup and post-timing claim checks are
+outside the timed region. The aggregation and independent-signature fixtures
+sign with upstream's mock
+leanXMSS keys (`signatures::lean_xmss::mock`), as upstream's own benchmarks do:
+each is real only over leaf indices 0 through 15, so its signatures are real
+leanXMSS signatures that verify and aggregate like any other, at a fraction of
+a full key's generation cost. Every fixture signer-and-message pair has its own
+seed, in a seed domain the full keys never use. Full keys remain for the timed
+key-generation workload and the fast sign, serialization, and single-verify
+benchmarks. Aggregate verification times
+`lean_pq::Aggregate::from_bytes`, which decodes and verifies the proof; the
+listed claims are compared with the expected signers afterwards. Lighthouse operations are calibrated in batches of at least 10 ms and
 reported per operation.
 
 The local equivalent of the slow PR job is:
 
 ```bash
-cargo build --release -p lean-multisig-comparison --bin slow_comparison
+cargo build --release -p lean-pq-comparison --bin slow_comparison
 /usr/bin/time -v -o resource-usage.txt target/release/slow_comparison \
   --samples 3 \
   --same-sizes 1,8,16,256,512 \
@@ -112,12 +124,12 @@ Lighthouse documents as an EF-test-only, non-production path. The fast
 comparison: LeanVM verifies the same independent signer-and-message tuples
 that Lighthouse verifies with its batch API.
 
-The 512-signer fixture-shape regression validates every raw XMSS signature and
-takes minutes, so ordinary `cargo test` skips it. Run it explicitly when
+The 512-signer fixture-shape regression builds and validates every raw leanXMSS
+fixture signature, so ordinary `cargo test` skips it. Run it explicitly when
 changing fixture construction:
 
 ```bash
-cargo test -p lean-multisig-comparison --test fixtures \
+cargo test -p lean-pq-comparison --test fixtures \
   same_claim_fixtures_support_the_expanded_signer_limit -- --ignored --exact
 ```
 
@@ -153,8 +165,7 @@ Benchmark execution, proof/signature validation, report conversion, and
 artifact failures still fail their jobs. Each environment sidecar records the
 commit, runner OS and architecture, runner image name and version, CPU, kernel,
 Rust and Cargo versions, the manifest-derived Lighthouse revision, suite,
-sample count, the fixed `2^20` key-creation slot count, applicable size axes,
-and proof-warmup mode.
+sample count, applicable size axes, and proof-warmup mode.
 
 ## Current-results dashboard
 
@@ -173,8 +184,7 @@ The trusted benchmark workflow has two modes:
   proof warm-up. One-sample smoke runs remain local-only and cannot be published
   by the workflow.
 
-For example, this explicitly opts into the large same-claim sweep while keeping
-distinct claims within their hard limit of 16:
+For example, this explicitly opts into the large same-claim sweep:
 
 ```bash
 gh workflow run benchmarks-history.yml \
@@ -186,8 +196,7 @@ gh workflow run benchmarks-history.yml \
 ```
 
 That full sweep can take substantial time and memory. Same-claim sizes
-`32,64,128` remain manual additions; distinct-claim sizes above 16 are not
-supported.
+`32,64,128` and distinct-claim sizes above 16 remain manual additions.
 
 Each successful measurement produces a validated `dashboard.json`. A separate
 publication job downloads only successful artifacts, checks out `gh-pages`, and
@@ -195,13 +204,13 @@ replaces `data/fast.json` and/or `data/slow.json`. A fast-only run preserves the
 last slow result and vice versa. It also installs the static dashboard as the
 branch-root `index.html`; it does not execute measured repository code.
 
-The public page is <https://ethereum.github.io/lean-multisig-bindings/>. It shows
+The public page is <https://ethereum.github.io/lean-pq-bindings/>. It shows
 only the newest result for each suite: LeanVM and Lighthouse timings and ratios
 grouped by operation family; serialized secret-key, public-key, and raw-signature
 sizes; LeanVM proof and aggregate BLS signature sizes; overall slow-suite peak
 RSS; recursive proof-to-proof aggregation at fan-ins 2, 4, 8, and 16; and the
-measurement environment. The LeanVM key-creation row uses
-1,048,576 signing slots and reports its serialized key size. A short glossary
+measurement environment. The LeanVM key-creation row times deriving one
+leanXMSS key from its seed and reports its 32-byte serialized size. A short glossary
 defines the aggregation and verification workloads. There are no
 commit-over-commit plots. The first publication removes the old nested
 `dev/bench` pages.

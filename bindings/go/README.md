@@ -1,8 +1,9 @@
-# leanMultisig Go bindings
+# lean-pq Go bindings
 
-Go bindings for [leanMultisig](https://github.com/leanEthereum/leanMultisig), backed by a native
-Rust static archive linked into the final program through cgo. The Go API uses normal Go values and
-`Close` methods; it does not expose C pointers or the internal bridge ABI.
+Go bindings for leanXMSS and leanSPHINCS signatures and their recursive aggregation from
+[leanVM](https://github.com/leanEthereum/leanVM), backed by a native Rust static archive linked into
+the final program through cgo. The Go API uses normal Go values and `Close` methods; it does not
+expose C pointers or the internal bridge ABI.
 
 ## Requirements
 
@@ -11,7 +12,7 @@ Rust static archive linked into the final program through cgo. The Go API uses n
 - [Zig](https://ziglang.org/) and [`cargo-zigbuild`](https://github.com/rust-cross/cargo-zigbuild)
   when producing a native archive from source
 
-The Go package expects a target-matched `liblean_multisig_native.a` in its internal native-asset
+The Go package expects a target-matched `liblean_pq_native.a` in its internal native-asset
 directory. Go build tags select that archive and link it into the final Go binary. The release
 distribution mechanism for those archives is intentionally separate from the build layout described
 here.
@@ -28,6 +29,8 @@ sh bindings/native/scripts/stage-static.sh x86_64-unknown-linux-gnu bindings/go/
 cd bindings/go
 go test ./...
 ```
+
+The aggregation test proves recursively: expect seconds per proof and about 1.6 GB of memory.
 
 The release build stages these target/archive pairs:
 
@@ -48,28 +51,80 @@ package main
 import (
     "log"
 
-    leanmultisig "github.com/ethereum/lean-multisig-bindings/bindings/go"
+    leanpq "github.com/ethereum/lean-pq-bindings/bindings/go"
 )
 
 func main() {
-    var seed, message [32]byte
-    key, err := leanmultisig.SecretKeyFromSeed(seed, 100, 115)
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer key.Close()
+    message := [32]byte{0x42}
 
-    if err := leanmultisig.Setup(); err != nil {
-        log.Fatal(err)
-    }
-    signature, err := key.Sign(leanmultisig.Claim{Message: message, Slot: 100})
+    xmssKey, err := leanpq.XmssSecretKeyFromSeed([32]byte{0x01})
     if err != nil {
         log.Fatal(err)
     }
-    defer signature.Close()
+    defer xmssKey.Close()
+    xmssPublicKey, err := xmssKey.PublicKey()
+    if err != nil {
+        log.Fatal(err)
+    }
+    xmssSignature, err := xmssKey.Sign(message, 7)
+    if err != nil {
+        log.Fatal(err)
+    }
+    if err := leanpq.XmssVerify(xmssPublicKey, message, xmssSignature); err != nil {
+        log.Fatal(err)
+    }
+
+    sphincsKey, err := leanpq.SphincsSecretKeyFromSeed([32]byte{0x02}, 4)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer sphincsKey.Close()
+    sphincsPublicKey, err := sphincsKey.PublicKey()
+    if err != nil {
+        log.Fatal(err)
+    }
+    sphincsSignature, err := sphincsKey.Sign(message)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    leaf, err := leanpq.AggregateSignatures(
+        nil,
+        []leanpq.XmssSignedMessage{{PublicKey: xmssPublicKey, Message: message, Signature: xmssSignature}},
+        []leanpq.SphincsSignedMessage{{PublicKey: sphincsPublicKey, Message: message, Signature: sphincsSignature}},
+    )
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer leaf.Close()
+    root, err := leanpq.AggregateSignatures([]*leanpq.Aggregate{leaf}, nil, nil)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer root.Close()
+
+    encoded, err := root.Bytes()
+    if err != nil {
+        log.Fatal(err)
+    }
+    received, err := leanpq.AggregateFromBytes(encoded) // decodes and verifies
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer received.Close()
+    claims, err := received.XmssClaims()
+    if err != nil {
+        log.Fatal(err)
+    }
+    log.Printf("leanXMSS claims: %x", claims)
 }
 ```
 
-Signature and multi-claim-proof byte encodings intentionally omit their claim/signer context.
-Supply that context when calling `SignatureFromBytes`, `MultiClaimProofFromBytes`, `Verify`, or
-`VerifyClaims`.
+leanXMSS keys are stateful: persist your own durable high-water leaf index alongside
+`XmssSecretKey.Bytes()` and never sign two different messages at the same leaf index. leanSPHINCS
+keys are stateless; `keptHeight` (at most 26) trades signing capacity for key generation time.
+
+An aggregate attests the claims it lists, not the claims you wanted: compare `XmssClaims()` and
+`SphincsClaims()` against what you expect. `AggregateSignatures` verifies every raw signature before
+proving, and `AggregateFromBytes` verifies the proof it decodes, so every `Aggregate` is proven.
+`Setup` moves the one-time setup ahead of the first proof; calling it is optional.

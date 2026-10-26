@@ -1,6 +1,6 @@
-use lean_multisig_comparison::{
-    deterministic_key_material, BlsFixtureSet, FixtureSet, MAX_DISTINCT_CLAIMS,
-    MAX_SAME_CLAIM_SIGNERS, MIXED_CLAIM_COUNTS, MIXED_CLAIM_SIGNATURES,
+use lean_pq_comparison::{
+    deterministic_key_material, lean_fixture_signer, lean_full_key_seed, BlsFixtureSet, FixtureSet,
+    FIXTURE_FIRST_LEAF, FIXTURE_LAST_LEAF, MAX_SIGNERS, MIXED_CLAIM_COUNTS, MIXED_CLAIM_SIGNATURES,
 };
 
 #[test]
@@ -22,13 +22,13 @@ fn fixtures_have_the_requested_unique_signers() {
 
 #[test]
 fn bls_only_same_claim_fixtures_scale_to_512_signers() {
-    let fixtures = BlsFixtureSet::same_claim(MAX_SAME_CLAIM_SIGNERS).unwrap();
+    let fixtures = BlsFixtureSet::same_claim(MAX_SIGNERS).unwrap();
 
-    assert_eq!(fixtures.len(), MAX_SAME_CLAIM_SIGNERS);
-    assert_eq!(fixtures.messages().len(), MAX_SAME_CLAIM_SIGNERS);
-    assert_eq!(fixtures.keys().len(), MAX_SAME_CLAIM_SIGNERS);
-    assert_eq!(fixtures.signatures().len(), MAX_SAME_CLAIM_SIGNERS);
-    assert_eq!(fixtures.public_keys().len(), MAX_SAME_CLAIM_SIGNERS);
+    assert_eq!(fixtures.len(), MAX_SIGNERS);
+    assert_eq!(fixtures.messages().len(), MAX_SIGNERS);
+    assert_eq!(fixtures.keys().len(), MAX_SIGNERS);
+    assert_eq!(fixtures.signatures().len(), MAX_SIGNERS);
+    assert_eq!(fixtures.public_keys().len(), MAX_SIGNERS);
     assert!(fixtures.verify_same_claim_aggregate(&fixtures.aggregate()));
 }
 
@@ -53,41 +53,51 @@ fn bls_only_fixtures_expose_borrowed_signature_sets() {
 #[test]
 #[ignore = "validates 512 XMSS fixtures and is intentionally slow"]
 fn same_claim_fixtures_support_the_expanded_signer_limit() {
-    let fixtures = FixtureSet::same_claim(MAX_SAME_CLAIM_SIGNERS).unwrap();
+    let fixtures = FixtureSet::same_claim(MAX_SIGNERS).unwrap();
 
-    assert_eq!(fixtures.lean_claims().len(), MAX_SAME_CLAIM_SIGNERS);
-    assert_eq!(fixtures.lean_keys().len(), MAX_SAME_CLAIM_SIGNERS);
-    assert_eq!(fixtures.lean_signatures().len(), MAX_SAME_CLAIM_SIGNERS);
-    assert_eq!(fixtures.lean_public_keys().len(), MAX_SAME_CLAIM_SIGNERS);
-    assert_eq!(fixtures.bls_messages().len(), MAX_SAME_CLAIM_SIGNERS);
-    assert_eq!(fixtures.bls_keys().len(), MAX_SAME_CLAIM_SIGNERS);
-    assert_eq!(fixtures.bls_signatures().len(), MAX_SAME_CLAIM_SIGNERS);
-    assert_eq!(fixtures.bls_public_keys().len(), MAX_SAME_CLAIM_SIGNERS);
+    assert_eq!(fixtures.lean_messages().len(), MAX_SIGNERS);
+    assert_eq!(fixtures.lean_signatures().len(), MAX_SIGNERS);
+    assert_eq!(fixtures.lean_public_keys().len(), MAX_SIGNERS);
+    assert_eq!(fixtures.bls_messages().len(), MAX_SIGNERS);
+    assert_eq!(fixtures.bls_keys().len(), MAX_SIGNERS);
+    assert_eq!(fixtures.bls_signatures().len(), MAX_SIGNERS);
+    assert_eq!(fixtures.bls_public_keys().len(), MAX_SIGNERS);
 }
 
 #[test]
-fn distinct_fixtures_use_distinct_messages_and_slots() {
+fn distinct_fixtures_use_distinct_messages_and_leaf_indices() {
     let fixtures = FixtureSet::distinct_claims(3).unwrap();
 
-    assert_eq!(fixtures.lean_claims()[0].slot(), 0);
-    assert_eq!(fixtures.lean_claims()[1].slot(), 1);
-    assert_ne!(
-        fixtures.lean_claims()[0].message(),
-        fixtures.lean_claims()[1].message()
-    );
+    assert_eq!(fixtures.lean_signatures()[0].leaf_index(), 0);
+    assert_eq!(fixtures.lean_signatures()[1].leaf_index(), 1);
+    assert_ne!(fixtures.lean_messages()[0], fixtures.lean_messages()[1]);
     assert_ne!(fixtures.bls_messages()[0], fixtures.bls_messages()[1]);
+}
+
+#[test]
+fn fixture_inputs_and_expected_claims_match_every_signer() {
+    let fixtures = FixtureSet::mixed_claims(4, 2).unwrap();
+    let inputs = fixtures.lean_inputs();
+    let expected = fixtures.lean_expected_claims();
+
+    assert_eq!(inputs.len(), 4);
+    assert!(expected.windows(2).all(|pair| pair[0] < pair[1]));
+    for (index, (public_key, message, signature)) in inputs.iter().enumerate() {
+        assert_eq!(*public_key, fixtures.lean_public_keys()[index]);
+        assert_eq!(*message, fixtures.lean_messages()[index]);
+        assert_eq!(*signature, fixtures.lean_signatures()[index]);
+        assert!(expected.contains(&(*public_key, *message)));
+    }
 }
 
 #[test]
 fn mixed_claim_fixtures_distribute_signers_evenly() {
     let fixtures = FixtureSet::mixed_claims(8, 2).unwrap();
-    let groups = fixtures.lean_claim_groups();
 
     assert_eq!(fixtures.claim_count(), 2);
-    assert_eq!(groups.len(), 2);
-    assert!(groups.iter().all(|group| group.signers.len() == 4));
-    assert_eq!(fixtures.lean_claims()[0], fixtures.lean_claims()[2]);
-    assert_ne!(fixtures.lean_claims()[0], fixtures.lean_claims()[1]);
+    assert_eq!(signers_per_message(&fixtures), [4, 4]);
+    assert_eq!(fixtures.lean_messages()[0], fixtures.lean_messages()[2]);
+    assert_ne!(fixtures.lean_messages()[0], fixtures.lean_messages()[1]);
     assert_eq!(fixtures.bls_messages()[0], fixtures.bls_messages()[2]);
     assert_ne!(fixtures.bls_messages()[0], fixtures.bls_messages()[1]);
 
@@ -102,8 +112,7 @@ fn mixed_claim_fixtures_validate_the_requested_shape() {
     assert!(FixtureSet::mixed_claims(8, 0).is_err());
     assert!(FixtureSet::mixed_claims(8, 3).is_err());
     assert!(FixtureSet::mixed_claims(8, 9).is_err());
-    assert!(FixtureSet::mixed_claims(8, MAX_DISTINCT_CLAIMS + 1).is_err());
-    assert!(FixtureSet::mixed_claims(MAX_SAME_CLAIM_SIGNERS + 1, 1).is_err());
+    assert!(FixtureSet::mixed_claims(MAX_SIGNERS + 1, 1).is_err());
     assert_eq!(MIXED_CLAIM_COUNTS, [8, 16]);
     assert_eq!(MIXED_CLAIM_SIGNATURES / MIXED_CLAIM_COUNTS[0], 64);
     assert_eq!(MIXED_CLAIM_SIGNATURES / MIXED_CLAIM_COUNTS[1], 32);
@@ -114,21 +123,44 @@ fn mixed_claim_fixtures_validate_the_requested_shape() {
 fn configured_mixed_claim_fixtures_have_even_signer_groups() {
     for claim_count in MIXED_CLAIM_COUNTS {
         let fixtures = FixtureSet::mixed_claims(MIXED_CLAIM_SIGNATURES, claim_count).unwrap();
-        let groups = fixtures.lean_claim_groups();
+        let groups = signers_per_message(&fixtures);
 
         assert_eq!(groups.len(), claim_count);
         assert!(groups
             .iter()
-            .all(|group| group.signers.len() == MIXED_CLAIM_SIGNATURES / claim_count));
+            .all(|signers| *signers == MIXED_CLAIM_SIGNATURES / claim_count));
     }
 }
 
 #[test]
-fn fixture_xmss_keys_have_exactly_the_supported_claim_slots() {
-    let fixtures = FixtureSet::same_claim(1).unwrap();
-    let last_slot = u32::try_from(MAX_DISTINCT_CLAIMS - 1).unwrap();
+fn fixture_signers_are_deterministic_real_signatures_in_the_mock_range() {
+    let (public_key, message, signature) = lean_fixture_signer(0, 1).unwrap();
 
-    assert_eq!(fixtures.lean_keys()[0].slots(), 0..=last_slot);
+    assert_eq!(
+        lean_fixture_signer(0, 1).unwrap(),
+        (public_key, message, signature.clone())
+    );
+    assert_eq!(message, deterministic_key_material(1).unwrap());
+    assert!((FIXTURE_FIRST_LEAF..=FIXTURE_LAST_LEAF).contains(&signature.leaf_index()));
+    lean_pq::xmss::verify(&public_key, &message, &signature).unwrap();
+}
+
+#[test]
+fn fixture_signer_seeds_bind_one_message_and_avoid_full_keys() {
+    let (first_message_key, _, _) = lean_fixture_signer(0, 0).unwrap();
+    let (second_message_key, _, _) = lean_fixture_signer(0, 1).unwrap();
+    let full_key = lean_pq::xmss::SecretKey::from_seed(lean_full_key_seed(0).unwrap());
+
+    assert_ne!(first_message_key, second_message_key);
+    assert_ne!(first_message_key, full_key.public_key());
+    assert_ne!(
+        lean_full_key_seed(0).unwrap(),
+        lean_full_key_seed(1).unwrap()
+    );
+    assert_ne!(
+        lean_full_key_seed(0).unwrap(),
+        deterministic_key_material(0).unwrap()
+    );
 }
 
 #[test]
@@ -137,7 +169,7 @@ fn fixtures_reject_empty_and_excessive_counts() {
     assert!(BlsFixtureSet::distinct_claims(0).is_err());
     assert!(FixtureSet::same_claim(0).is_err());
     assert!(FixtureSet::distinct_claims(0).is_err());
-    assert!(FixtureSet::distinct_claims(MAX_DISTINCT_CLAIMS + 1).is_err());
+    assert!(FixtureSet::distinct_claims(MAX_SIGNERS + 1).is_err());
 }
 
 #[test]
@@ -157,7 +189,6 @@ fn deterministic_key_material_is_stable_unique_and_nonzero() {
     assert_eq!(first, deterministic_key_material(0).unwrap());
     assert_ne!(first, second);
     assert_ne!(first, [0; 32]);
-    lean_multisig::SecretKey::from_seed(first, 0..=MAX_DISTINCT_CLAIMS as u32).unwrap();
     lighthouse_bls::SecretKey::deserialize(&first).unwrap();
 }
 
@@ -190,4 +221,12 @@ fn borrowed_signature_sets_verify_as_a_batch() {
 
     assert_eq!(signature_sets.len(), fixtures.len());
     assert!(lighthouse_bls::verify_signature_sets(signature_sets.iter()));
+}
+
+fn signers_per_message(fixtures: &FixtureSet) -> Vec<usize> {
+    let mut counts = std::collections::BTreeMap::new();
+    for message in fixtures.lean_messages() {
+        *counts.entry(*message).or_insert(0) += 1;
+    }
+    counts.into_values().collect()
 }

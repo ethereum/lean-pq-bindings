@@ -1,16 +1,18 @@
 [package]
-name = "lean-multisig-comparison"
+name = "lean-pq-comparison"
 version = "0.1.0"
 edition = "2021"
 publish = false
 
 [dependencies]
 anyhow = "1"
-lean-multisig = { path = "../../bindings/rust" }
+lean-pq = { path = "../../bindings/rust" }
 lighthouse-bls = { package = "bls", git = "https://github.com/sigp/lighthouse.git", rev = "e423a66763bb1bd780492d635123f208d80c3538" }
 same-file = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Upstream mock leanXMSS keys, real over a short leaf range, for untimed fixture signers.
+signatures = { git = "https://github.com/leanEthereum/leanVM.git", rev = "a39758de10f35c7b34023d061cc05dfc0b36d43a", features = ["mock"] }
 
 [dev-dependencies]
 criterion = "0.8"

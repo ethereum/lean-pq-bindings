@@ -1,7 +1,27 @@
 const native = require('./index.js')
 
-native.SecretKey.generate = native.generateSecretKey
-native.SecretKey.fromSeed = native.secretKeyFromSeed
-native.SecretKey.fromBytes = native.secretKeyFromBytes
+const { Aggregate, SphincsSecretKey, XmssSecretKey } = native
 
-module.exports = native
+XmssSecretKey.generate = native.generateXmssSecretKey
+XmssSecretKey.fromSeed = native.xmssSecretKeyFromSeed
+XmssSecretKey.fromBytes = native.xmssSecretKeyFromBytes
+
+SphincsSecretKey.generate = native.generateSphincsSecretKey
+SphincsSecretKey.fromSeed = native.sphincsSecretKeyFromSeed
+SphincsSecretKey.fromBytes = native.sphincsSecretKeyFromBytes
+
+Aggregate.fromBytes = native.aggregateFromBytes
+
+function aggregate({ children = [], xmss = [], sphincs = [] } = {}) {
+  return native.aggregate(children, xmss, sphincs)
+}
+
+module.exports = {
+  setup: native.setup,
+  XmssSecretKey,
+  xmssVerify: native.xmssVerify,
+  SphincsSecretKey,
+  sphincsVerify: native.sphincsVerify,
+  Aggregate,
+  aggregate,
+}

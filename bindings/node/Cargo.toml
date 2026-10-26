@@ -1,5 +1,5 @@
 [package]
-name = "lean-multisig-node"
+name = "lean-pq-node"
 version = "0.1.0"
 edition = "2021"
 publish = false
@@ -8,7 +8,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-lean_multisig_api = { workspace = true }
+lean-pq = { workspace = true }
 napi = { version = "3.12.1", features = ["napi9"] }
 napi-derive = "3.6.3"
 

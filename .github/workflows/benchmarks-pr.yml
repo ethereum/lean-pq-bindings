@@ -80,7 +80,7 @@ jobs:
         run: |
           set -o pipefail
           rm -rf -- target/criterion
-          cargo bench -p lean-multisig-comparison --bench comparison -- \
+          cargo bench -p lean-pq-comparison --bench comparison -- \
             --noplot 2>&1 \
             | tee benchmark-artifacts/fast/criterion-output.txt
 
@@ -122,7 +122,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   slow:
-    name: Large-key and proof comparison benchmarks
+    name: Key-creation and proof comparison benchmarks
     if: >-
       github.event.action != 'closed' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
@@ -164,7 +164,6 @@ jobs:
             echo "lighthouse_revision=$lighthouse_revision"
             echo "suite=slow"
             echo "samples=3"
-            echo "key_creation_slots=1048576"
             echo "same_sizes=1,8,16,256,512"
             echo "distinct_sizes=1,8,16"
             echo "mixed_claim_shapes=512x8,512x16"
@@ -176,11 +175,11 @@ jobs:
             lscpu
           } > benchmark-artifacts/slow/environment.txt
 
-      - name: Run large-key and proof benchmarks
+      - name: Run key-creation and proof benchmarks
         shell: bash
         run: |
           set -o pipefail
-          cargo build --release -p lean-multisig-comparison --bin slow_comparison
+          cargo build --release -p lean-pq-comparison --bin slow_comparison
           /usr/bin/time -v -o benchmark-artifacts/slow/resource-usage.txt \
             target/release/slow_comparison \
             --samples 3 \

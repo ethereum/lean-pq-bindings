@@ -1,16 +1,14 @@
-# Enable AVX2 on x86_64-apple-darwin so the upstream backend uses its
-# tested packed-field path instead of the no_packing fallback (which
-# silently breaks the prover under aggregation). Mirrors what upstream
-# does via `target-cpu=native` in its own .cargo/config.toml — but
-# scoped to a portable feature flag so this works in CI too.
+# leanVM selects its binary-field and Keccak kernels by compile-time target feature; upstream
+# builds with `target-cpu=native`. Pin a portable baseline instead: AVX2 and PCLMULQDQ enable
+# the x86_64 carry-less multiplication kernels, and are present on every AVX2-capable CPU.
 [target.x86_64-apple-darwin]
-rustflags = ["-C", "target-feature=+avx2"]
+rustflags = ["-C", "target-feature=+avx2,+pclmulqdq"]
 
 [target.x86_64-unknown-linux-gnu]
-rustflags = ["-C", "target-feature=+avx2"]
+rustflags = ["-C", "target-feature=+avx2,+pclmulqdq"]
 
 [target.aarch64-apple-darwin]
-# NEON is enabled by default on aarch64 — no override needed.
+# The default Apple target already enables the AES (PMULL) and SHA3 kernels.
 
 [target.aarch64-unknown-linux-gnu]
 # NEON is enabled by default on aarch64 — no override needed.

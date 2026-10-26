@@ -205,7 +205,7 @@ wheels = [
 ]
 
 [[package]]
-name = "py-lean-multisig"
+name = "py-lean-pq"
 source = { editable = "." }
 
 [package.optional-dependencies]

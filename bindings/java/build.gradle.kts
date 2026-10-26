@@ -23,9 +23,9 @@ dependencies {
 }
 
 val nativeLibraryName = when {
-    System.getProperty("os.name").startsWith("Mac") -> "liblean_multisig_native.dylib"
-    System.getProperty("os.name").startsWith("Windows") -> "lean_multisig_native.dll"
-    else -> "liblean_multisig_native.so"
+    System.getProperty("os.name").startsWith("Mac") -> "liblean_pq_native.dylib"
+    System.getProperty("os.name").startsWith("Windows") -> "lean_pq_native.dll"
+    else -> "liblean_pq_native.so"
 }
 val nativeLibrary = rootProject.projectDir.resolve("../../target/release/$nativeLibraryName")
 
@@ -36,7 +36,7 @@ val buildNative by tasks.registering(Exec::class) {
 tasks.test {
     dependsOn(buildNative)
     useJUnitPlatform()
-    systemProperty("lean.multisig.native.path", nativeLibrary.absolutePath)
+    systemProperty("lean.pq.native.path", nativeLibrary.absolutePath)
     // Gradle executes JUnit tests on the class path. Published consumers use the narrower named
     // module permission documented in README.md.
     jvmArgs("--enable-native-access=ALL-UNNAMED")

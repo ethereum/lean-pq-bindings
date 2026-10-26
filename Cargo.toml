@@ -9,7 +9,8 @@ members = [
 resolver = "2"
 
 [workspace.dependencies]
-lean_multisig_api = { git = "https://github.com/kevaundray/leanVM.git", rev = "f4d2270ac0f694da386489452589664105de0829" }
+leanvm = { git = "https://github.com/leanEthereum/leanVM.git", rev = "a39758de10f35c7b34023d061cc05dfc0b36d43a" }
+lean-pq = { path = "bindings/rust" }
 
 [profile.release]
 lto = "thin"

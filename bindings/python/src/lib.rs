@@ -1,96 +1,123 @@
-use std::sync::Arc;
-
-use lean_multisig_api as api;
+use lean_pq::{sphincs, xmss, Message};
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyValueError};
 use pyo3::prelude::*;
-use pyo3::pyclass::CompareOp;
-use pyo3::types::PyBytes;
-use pyo3::types::PyType;
+use pyo3::pybacked::PyBackedBytes;
+use pyo3::types::{PyBytes, PyType};
 use pyo3::wrap_pyfunction;
 
-create_exception!(py_lean_multisig, LeanMultisigError, PyException);
+create_exception!(py_lean_pq, LeanPqError, PyException);
 
-fn api_error(error: api::Error) -> PyErr {
-    LeanMultisigError::new_err(error.to_string())
+fn api_error(error: lean_pq::Error) -> PyErr {
+    LeanPqError::new_err(error.to_string())
 }
 
-fn bytes32(bytes: &[u8], name: &str) -> PyResult<[u8; 32]> {
+fn fixed<const N: usize>(bytes: &[u8], name: &str) -> PyResult<[u8; N]> {
     bytes.try_into().map_err(|_| {
         PyValueError::new_err(format!(
-            "{name} must be exactly 32 bytes, got {}",
+            "{name} must be exactly {N} bytes, got {}",
             bytes.len()
         ))
     })
 }
 
-fn public_keys(signers: Vec<Vec<u8>>) -> PyResult<Vec<api::PublicKey>> {
-    signers
-        .iter()
-        .map(|signer| bytes32(signer, "public key"))
-        .collect()
+fn message(bytes: &[u8]) -> PyResult<Message> {
+    fixed(bytes, "message")
 }
 
-#[pyclass(
-    name = "Claim",
-    frozen,
-    module = "py_lean_multisig",
-    skip_from_py_object
-)]
-#[derive(Clone)]
-struct PyClaim {
-    inner: api::Claim,
+fn xmss_public_key(bytes: &[u8]) -> PyResult<xmss::PublicKey> {
+    fixed::<{ lean_pq::PUBLIC_KEY_LEN }>(bytes, "public key")?;
+    xmss::PublicKey::from_bytes(bytes).map_err(api_error)
+}
+
+fn xmss_signature(bytes: &[u8]) -> PyResult<xmss::Signature> {
+    fixed::<{ xmss::SIGNATURE_LEN }>(bytes, "leanXMSS signature")?;
+    xmss::Signature::from_bytes(bytes).map_err(api_error)
+}
+
+fn sphincs_public_key(bytes: &[u8]) -> PyResult<sphincs::PublicKey> {
+    fixed::<{ lean_pq::PUBLIC_KEY_LEN }>(bytes, "public key")?;
+    sphincs::PublicKey::from_bytes(bytes).map_err(api_error)
+}
+
+fn sphincs_signature(bytes: &[u8]) -> PyResult<sphincs::Signature> {
+    fixed::<{ sphincs::SIGNATURE_LEN }>(bytes, "leanSPHINCS signature")?;
+    sphincs::Signature::from_bytes(bytes).map_err(api_error)
+}
+
+type SignedMessage = (PyBackedBytes, PyBackedBytes, PyBackedBytes);
+
+#[pyclass(name = "XmssSecretKey", frozen, module = "py_lean_pq")]
+struct PyXmssSecretKey {
+    inner: xmss::SecretKey,
 }
 
 #[pymethods]
-impl PyClaim {
-    #[new]
-    fn new(message: &[u8], slot: u32) -> PyResult<Self> {
+impl PyXmssSecretKey {
+    #[classmethod]
+    fn generate(_cls: &Bound<'_, PyType>, py: Python<'_>) -> Self {
+        Self {
+            inner: py.detach(xmss::SecretKey::generate),
+        }
+    }
+
+    #[classmethod]
+    fn from_seed(_cls: &Bound<'_, PyType>, py: Python<'_>, seed: &[u8]) -> PyResult<Self> {
+        let seed = fixed(seed, "seed")?;
         Ok(Self {
-            inner: api::Claim::new(bytes32(message, "message")?, slot),
+            inner: py.detach(move || xmss::SecretKey::from_seed(seed)),
         })
     }
 
-    #[getter]
-    fn message<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
-        PyBytes::new(py, self.inner.message())
+    #[classmethod]
+    fn from_bytes(_cls: &Bound<'_, PyType>, py: Python<'_>, data: &[u8]) -> PyResult<Self> {
+        Ok(Self {
+            inner: py
+                .detach(|| xmss::SecretKey::from_bytes(data))
+                .map_err(api_error)?,
+        })
+    }
+
+    fn to_bytes<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
+        PyBytes::new(py, &self.inner.to_bytes())
     }
 
     #[getter]
-    fn slot(&self) -> u32 {
-        self.inner.slot()
+    fn public_key<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
+        PyBytes::new(py, &self.inner.public_key().to_bytes())
     }
 
-    fn __repr__(&self) -> String {
-        format!("Claim(slot={})", self.inner.slot())
+    fn prepare(&self, py: Python<'_>, leaf_index: xmss::LeafIndex) -> PyResult<()> {
+        py.detach(|| self.inner.prepare(leaf_index))
+            .map_err(api_error)
     }
 
-    fn __richcmp__(&self, other: &Self, op: CompareOp) -> PyResult<bool> {
-        match op {
-            CompareOp::Eq => Ok(self.inner == other.inner),
-            CompareOp::Ne => Ok(self.inner != other.inner),
-            _ => Err(PyValueError::new_err("Claim only supports == and !=")),
-        }
+    fn sign<'py>(
+        &self,
+        py: Python<'py>,
+        message: &[u8],
+        leaf_index: xmss::LeafIndex,
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let message = self::message(message)?;
+        let signature = py
+            .detach(|| self.inner.sign(&message, leaf_index))
+            .map_err(api_error)?;
+        Ok(PyBytes::new(py, &signature.to_bytes()))
     }
 }
 
-#[pyclass(name = "SecretKey", module = "py_lean_multisig")]
-struct PySecretKey {
-    inner: api::SecretKey,
+#[pyclass(name = "SphincsSecretKey", frozen, module = "py_lean_pq")]
+struct PySphincsSecretKey {
+    inner: sphincs::SecretKey,
 }
 
 #[pymethods]
-impl PySecretKey {
+impl PySphincsSecretKey {
     #[classmethod]
-    fn generate(
-        _cls: &Bound<'_, PyType>,
-        py: Python<'_>,
-        slot_start: u32,
-        slot_end: u32,
-    ) -> PyResult<Self> {
+    fn generate(_cls: &Bound<'_, PyType>, py: Python<'_>, kept_height: usize) -> PyResult<Self> {
         Ok(Self {
             inner: py
-                .detach(move || api::SecretKey::generate(slot_start..=slot_end))
+                .detach(|| sphincs::SecretKey::generate(kept_height))
                 .map_err(api_error)?,
         })
     }
@@ -100,79 +127,69 @@ impl PySecretKey {
         _cls: &Bound<'_, PyType>,
         py: Python<'_>,
         seed: &[u8],
-        slot_start: u32,
-        slot_end: u32,
+        kept_height: usize,
     ) -> PyResult<Self> {
-        let seed = bytes32(seed, "seed")?;
+        let seed = fixed(seed, "seed")?;
         Ok(Self {
             inner: py
-                .detach(move || api::SecretKey::from_seed(seed, slot_start..=slot_end))
+                .detach(move || sphincs::SecretKey::from_seed(seed, kept_height))
                 .map_err(api_error)?,
         })
     }
 
     #[classmethod]
     fn from_bytes(_cls: &Bound<'_, PyType>, py: Python<'_>, data: &[u8]) -> PyResult<Self> {
-        let data = data.to_vec();
         Ok(Self {
             inner: py
-                .detach(move || api::SecretKey::from_bytes(&data))
+                .detach(|| sphincs::SecretKey::from_bytes(data))
                 .map_err(api_error)?,
         })
     }
 
     fn to_bytes<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
-        let bytes = py.detach(|| self.inner.to_bytes());
-        PyBytes::new(py, &bytes)
+        PyBytes::new(py, &self.inner.to_bytes())
     }
 
     #[getter]
     fn public_key<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
-        PyBytes::new(py, &self.inner.public_key())
+        PyBytes::new(py, &self.inner.public_key().to_bytes())
     }
 
     #[getter]
-    fn slot_start(&self) -> u32 {
-        *self.inner.slots().start()
+    fn kept_height(&self) -> usize {
+        self.inner.kept_height()
     }
 
-    #[getter]
-    fn slot_end(&self) -> u32 {
-        *self.inner.slots().end()
-    }
-
-    fn prepare(&self, py: Python<'_>, slot: u32) -> PyResult<()> {
-        py.detach(|| self.inner.prepare(slot)).map_err(api_error)
-    }
-
-    fn sign(&self, py: Python<'_>, claim: &PyClaim) -> PyResult<PySignature> {
-        let claim = claim.inner;
-        Ok(PySignature {
-            inner: Arc::new(py.detach(|| self.inner.sign(&claim)).map_err(api_error)?),
-        })
+    fn sign<'py>(&self, py: Python<'py>, message: &[u8]) -> PyResult<Bound<'py, PyBytes>> {
+        let message = self::message(message)?;
+        let signature = py.detach(|| self.inner.sign(&message)).map_err(api_error)?;
+        Ok(PyBytes::new(py, &signature.to_bytes()))
     }
 }
 
-#[pyclass(name = "Signature", module = "py_lean_multisig", skip_from_py_object)]
-#[derive(Clone)]
-struct PySignature {
-    inner: Arc<api::Signature>,
+#[pyclass(name = "Aggregate", frozen, module = "py_lean_pq")]
+struct PyAggregate {
+    inner: lean_pq::Aggregate,
+}
+
+fn claims<'py, const N: usize>(
+    py: Python<'py>,
+    claims: impl IntoIterator<Item = ([u8; N], Message)>,
+) -> Vec<(Bound<'py, PyBytes>, Bound<'py, PyBytes>)> {
+    claims
+        .into_iter()
+        .map(|(key, message)| (PyBytes::new(py, &key), PyBytes::new(py, &message)))
+        .collect()
 }
 
 #[pymethods]
-impl PySignature {
+impl PyAggregate {
     #[classmethod]
-    fn from_bytes(
-        _cls: &Bound<'_, PyType>,
-        data: &[u8],
-        claim: &PyClaim,
-        signers: Vec<Vec<u8>>,
-    ) -> PyResult<Self> {
+    fn from_bytes(_cls: &Bound<'_, PyType>, py: Python<'_>, data: &[u8]) -> PyResult<Self> {
         Ok(Self {
-            inner: Arc::new(
-                api::Signature::from_bytes(data, &claim.inner, &public_keys(signers)?)
-                    .map_err(api_error)?,
-            ),
+            inner: py
+                .detach(|| lean_pq::Aggregate::from_bytes(data))
+                .map_err(api_error)?,
         })
     }
 
@@ -181,197 +198,114 @@ impl PySignature {
     }
 
     #[getter]
-    fn claim(&self) -> PyClaim {
-        PyClaim {
-            inner: self.inner.claim(),
-        }
-    }
-
-    fn __repr__(&self) -> String {
-        format!("Signature({:?})", self.inner.claim())
-    }
-}
-
-#[pyclass(
-    name = "ClaimSigners",
-    module = "py_lean_multisig",
-    skip_from_py_object
-)]
-#[derive(Clone)]
-struct PyClaimSigners {
-    inner: api::ClaimSigners,
-}
-
-#[pymethods]
-impl PyClaimSigners {
-    #[new]
-    fn new(claim: &PyClaim, signers: Vec<Vec<u8>>) -> PyResult<Self> {
-        Ok(Self {
-            inner: api::ClaimSigners {
-                claim: claim.inner,
-                signers: public_keys(signers)?,
-            },
-        })
+    fn xmss_claims<'py>(&self, py: Python<'py>) -> Vec<(Bound<'py, PyBytes>, Bound<'py, PyBytes>)> {
+        claims(
+            py,
+            self.inner
+                .xmss_claims()
+                .into_iter()
+                .map(|(key, message)| (key.to_bytes(), message)),
+        )
     }
 
     #[getter]
-    fn claim(&self) -> PyClaim {
-        PyClaim {
-            inner: self.inner.claim,
-        }
-    }
-
-    #[getter]
-    fn signers(&self) -> Vec<Vec<u8>> {
-        self.inner
-            .signers
-            .iter()
-            .map(|signer| signer.to_vec())
-            .collect()
-    }
-}
-
-#[pyclass(
-    name = "MultiClaimProof",
-    module = "py_lean_multisig",
-    skip_from_py_object
-)]
-#[derive(Clone)]
-struct PyMultiClaimProof {
-    inner: Arc<api::MultiClaimProof>,
-}
-
-#[pymethods]
-impl PyMultiClaimProof {
-    #[classmethod]
-    fn from_bytes(
-        _cls: &Bound<'_, PyType>,
-        data: &[u8],
-        groups: Vec<PyRef<'_, PyClaimSigners>>,
-    ) -> PyResult<Self> {
-        let groups = groups
-            .iter()
-            .map(|group| group.inner.clone())
-            .collect::<Vec<_>>();
-        Ok(Self {
-            inner: Arc::new(api::MultiClaimProof::from_bytes(data, &groups).map_err(api_error)?),
-        })
-    }
-
-    fn to_bytes<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
-        PyBytes::new(py, &self.inner.to_bytes())
+    fn sphincs_claims<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> Vec<(Bound<'py, PyBytes>, Bound<'py, PyBytes>)> {
+        claims(
+            py,
+            self.inner
+                .sphincs_claims()
+                .into_iter()
+                .map(|(key, message)| (key.to_bytes(), message)),
+        )
     }
 }
 
 #[pyfunction]
 fn setup(py: Python<'_>) {
-    py.detach(api::setup);
+    py.detach(lean_pq::setup);
 }
 
 #[pyfunction]
+fn xmss_verify(
+    py: Python<'_>,
+    public_key: &[u8],
+    message: &[u8],
+    signature: &[u8],
+) -> PyResult<()> {
+    let public_key = xmss_public_key(public_key)?;
+    let message = self::message(message)?;
+    let signature = xmss_signature(signature)?;
+    py.detach(|| xmss::verify(&public_key, &message, &signature))
+        .map_err(api_error)
+}
+
+#[pyfunction]
+fn sphincs_verify(
+    py: Python<'_>,
+    public_key: &[u8],
+    message: &[u8],
+    signature: &[u8],
+) -> PyResult<()> {
+    let public_key = sphincs_public_key(public_key)?;
+    let message = self::message(message)?;
+    let signature = sphincs_signature(signature)?;
+    py.detach(|| sphincs::verify(&public_key, &message, &signature))
+        .map_err(api_error)
+}
+
+#[pyfunction]
+#[pyo3(
+    signature = (children = Vec::new(), xmss = Vec::new(), sphincs = Vec::new()),
+    text_signature = "(children=(), xmss=(), sphincs=())"
+)]
 fn aggregate(
     py: Python<'_>,
-    signatures: Vec<PyRef<'_, PySignature>>,
-    claim: &PyClaim,
-) -> PyResult<PySignature> {
-    let signatures = signatures
+    children: Vec<Bound<'_, PyAggregate>>,
+    xmss: Vec<SignedMessage>,
+    sphincs: Vec<SignedMessage>,
+) -> PyResult<PyAggregate> {
+    let children = children
         .iter()
-        .map(|signature| (*signature.inner).clone())
+        .map(|child| &child.get().inner)
         .collect::<Vec<_>>();
-    let claim = claim.inner;
-    py.detach(|| api::aggregate(signatures, &claim))
-        .map(|inner| PySignature {
-            inner: Arc::new(inner),
-        })
-        .map_err(api_error)
-}
-
-#[pyfunction]
-fn verified_signers(
-    py: Python<'_>,
-    signature: &PySignature,
-    claim: &PyClaim,
-) -> PyResult<Vec<Vec<u8>>> {
-    let signature = signature.inner.clone();
-    let claim = claim.inner;
-    py.detach(|| api::verified_signers(&signature, &claim))
-        .map(|signers| signers.into_iter().map(|signer| signer.to_vec()).collect())
-        .map_err(api_error)
-}
-
-#[pyfunction]
-fn verify(
-    py: Python<'_>,
-    signature: &PySignature,
-    expected_signers: Vec<Vec<u8>>,
-    claim: &PyClaim,
-) -> PyResult<()> {
-    let signature = signature.inner.clone();
-    let expected_signers = public_keys(expected_signers)?;
-    let claim = claim.inner;
-    py.detach(|| api::verify(&signature, &expected_signers, &claim))
-        .map_err(api_error)
-}
-
-#[pyfunction]
-fn merge_claims(
-    py: Python<'_>,
-    signatures: Vec<PyRef<'_, PySignature>>,
-) -> PyResult<PyMultiClaimProof> {
-    let signatures = signatures
+    let xmss = xmss
         .iter()
-        .map(|signature| (*signature.inner).clone())
-        .collect::<Vec<_>>();
-    py.detach(|| api::merge_claims(signatures))
-        .map(|inner| PyMultiClaimProof {
-            inner: Arc::new(inner),
+        .map(|(public_key, message, signature)| {
+            Ok((
+                xmss_public_key(public_key)?,
+                self::message(message)?,
+                xmss_signature(signature)?,
+            ))
         })
-        .map_err(api_error)
-}
-
-#[pyfunction]
-fn verified_claims(py: Python<'_>, proof: &PyMultiClaimProof) -> PyResult<Vec<PyClaimSigners>> {
-    let proof = proof.inner.clone();
-    py.detach(|| api::verified_claims(&proof))
-        .map(|groups| {
-            groups
-                .into_iter()
-                .map(|inner| PyClaimSigners { inner })
-                .collect()
-        })
-        .map_err(api_error)
-}
-
-#[pyfunction]
-fn verify_claims(
-    py: Python<'_>,
-    proof: &PyMultiClaimProof,
-    expected: Vec<PyRef<'_, PyClaimSigners>>,
-) -> PyResult<()> {
-    let proof = proof.inner.clone();
-    let expected = expected
+        .collect::<PyResult<Vec<_>>>()?;
+    let sphincs = sphincs
         .iter()
-        .map(|group| group.inner.clone())
-        .collect::<Vec<_>>();
-    py.detach(|| api::verify_claims(&proof, &expected))
+        .map(|(public_key, message, signature)| {
+            Ok((
+                sphincs_public_key(public_key)?,
+                self::message(message)?,
+                sphincs_signature(signature)?,
+            ))
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    py.detach(|| lean_pq::aggregate(&children, &xmss, &sphincs))
+        .map(|inner| PyAggregate { inner })
         .map_err(api_error)
 }
 
 #[pymodule]
-fn py_lean_multisig(py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
+fn py_lean_pq(py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("__version__", env!("CARGO_PKG_VERSION"))?;
-    module.add("LeanMultisigError", py.get_type::<LeanMultisigError>())?;
-    module.add_class::<PyClaim>()?;
-    module.add_class::<PySecretKey>()?;
-    module.add_class::<PySignature>()?;
-    module.add_class::<PyClaimSigners>()?;
-    module.add_class::<PyMultiClaimProof>()?;
+    module.add("LeanPqError", py.get_type::<LeanPqError>())?;
+    module.add_class::<PyXmssSecretKey>()?;
+    module.add_class::<PySphincsSecretKey>()?;
+    module.add_class::<PyAggregate>()?;
     module.add_function(wrap_pyfunction!(setup, module)?)?;
+    module.add_function(wrap_pyfunction!(xmss_verify, module)?)?;
+    module.add_function(wrap_pyfunction!(sphincs_verify, module)?)?;
     module.add_function(wrap_pyfunction!(aggregate, module)?)?;
-    module.add_function(wrap_pyfunction!(verified_signers, module)?)?;
-    module.add_function(wrap_pyfunction!(verify, module)?)?;
-    module.add_function(wrap_pyfunction!(merge_claims, module)?)?;
-    module.add_function(wrap_pyfunction!(verified_claims, module)?)?;
-    module.add_function(wrap_pyfunction!(verify_claims, module)?)?;
     Ok(())
 }
