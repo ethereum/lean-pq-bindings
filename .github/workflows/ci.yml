@@ -121,6 +121,26 @@ jobs:
           npm test
         working-directory: bindings/node
 
+      # napi generates index.js, index.d.ts and the per-platform npm/ packages; they must be committed.
+      - name: Check generated Node files are committed
+        run: |
+          npx napi create-npm-dirs
+          git status --porcelain -- index.js index.d.ts npm
+          test -z "$(git status --porcelain -- index.js index.d.ts npm)"
+        working-directory: bindings/node
+
+      # Packs the root and host platform packages, installs both tarballs into a fresh project and
+      # signs and verifies through the installed copy. Nothing is published.
+      - name: Pack and install Node packages
+        run: |
+          pack="$RUNNER_TEMP/npm-pack"
+          mkdir -p "$pack"
+          cp lean_pq_node.linux-x64-gnu.node npm/linux-x64-gnu/
+          npm pack --ignore-scripts --pack-destination "$pack"
+          npm pack --ignore-scripts --pack-destination "$pack" ./npm/linux-x64-gnu
+          sh scripts/install-check.sh "$pack/ethereum-lean-pq-0.0.0-dev.tgz" "$pack/ethereum-lean-pq-linux-x64-gnu-0.0.0-dev.tgz"
+        working-directory: bindings/node
+
   zig:
     name: Zig / ${{ matrix.platform.name }}
     strategy:

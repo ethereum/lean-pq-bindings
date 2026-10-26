@@ -208,3 +208,226 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$GITHUB_REF_NAME" "dist/lean-pq-zig-${GITHUB_REF_NAME#v}.tar.gz" --clobber
+
+  # One Node.js addon per napi target (bindings/node/package.json `napi.targets`). The version is
+  # stamped before building because the generated loader (index.js) bakes it in.
+  node-build:
+    name: Node.js build / ${{ matrix.platform.target }}
+    runs-on: ${{ matrix.platform.runner }}
+    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          # --use-napi-cross links against glibc 2.17, matching the manylinux2014 wheels.
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            build_args: --use-napi-cross
+          - runner: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            build_args: --use-napi-cross
+          # napi sets RUSTFLAGS for musl targets, which overrides .cargo/config.toml's target
+          # rustflags, so the x86_64 features are passed through RUSTFLAGS instead.
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            build_args: --cross-compile
+            rustflags: -C target-feature=+avx2,+pclmulqdq
+          - runner: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            build_args: --cross-compile
+          - runner: macos-14
+            target: x86_64-apple-darwin
+          - runner: macos-14
+            target: aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          package-manager-cache: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform.target }}
+      - if: matrix.platform.build_args == '--cross-compile'
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+      - name: Install cargo-zigbuild
+        if: matrix.platform.build_args == '--cross-compile'
+        run: cargo install cargo-zigbuild --locked
+      - name: Build
+        working-directory: bindings/node
+        env:
+          TARGET: ${{ matrix.platform.target }}
+          BUILD_ARGS: ${{ matrix.platform.build_args }}
+          TARGET_RUSTFLAGS: ${{ matrix.platform.rustflags }}
+        run: |
+          # An empty RUSTFLAGS would still override .cargo/config.toml, so set it only when needed.
+          if [ -n "$TARGET_RUSTFLAGS" ]; then export RUSTFLAGS="$TARGET_RUSTFLAGS"; fi
+          npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
+          npm ci
+          npx napi build --platform --release --target "$TARGET" ${BUILD_ARGS:+"$BUILD_ARGS"}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: node-binding-${{ matrix.platform.target }}
+          path: bindings/node/lean_pq_node.*.node
+          if-no-files-found: error
+      # The loader is target-independent; ship the one generated alongside the x86_64 Linux build.
+      - if: matrix.platform.target == 'x86_64-unknown-linux-gnu'
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-loader
+          path: |
+            bindings/node/index.js
+            bindings/node/index.d.ts
+          if-no-files-found: error
+
+  # Stamps every package with the tag's version, fills the platform packages and the root
+  # package's optionalDependencies, and packs the tarballs that node-test checks and
+  # node-publish uploads.
+  node-package:
+    name: Node.js package
+    needs: node-build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          package-manager-cache: false
+      - uses: actions/download-artifact@v4
+        with:
+          path: bindings/node/artifacts
+          pattern: node-binding-*
+      - uses: actions/download-artifact@v4
+        with:
+          name: node-loader
+          path: bindings/node
+      - name: Assemble and pack
+        working-directory: bindings/node
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          grep -q "expected $version but got" index.js
+          npm version "$version" --no-git-tag-version
+          npm ci
+          npx napi create-npm-dirs
+          npx napi artifacts --output-dir artifacts
+          npx napi pre-publish --tagstyle npm --no-gh-release --skip-optional-publish
+          mkdir dist
+          npm pack --ignore-scripts --pack-destination dist
+          for dir in npm/*/; do npm pack --ignore-scripts --pack-destination dist "./$dir"; done
+          # Every platform package must be packed and listed in the root's optionalDependencies.
+          node -e '
+            const fs = require("node:fs")
+            const root = require("./package.json")
+            const targets = fs.readdirSync("npm")
+            for (const target of targets) {
+              const name = root.name + "-" + target
+              if (root.optionalDependencies[name] !== root.version) throw new Error(name + " missing from optionalDependencies")
+              if (!fs.existsSync("dist/ethereum-lean-pq-" + target + "-" + root.version + ".tgz")) throw new Error(name + " not packed")
+            }
+            if (Object.keys(root.optionalDependencies).length !== targets.length) throw new Error("unexpected optionalDependencies")
+          '
+      - uses: actions/upload-artifact@v4
+        with:
+          name: node-packages
+          path: bindings/node/dist/*.tgz
+          if-no-files-found: error
+
+  # Installs the packed root and platform package on each platform and signs, verifies and
+  # aggregates through them. Alpine runs in a plain container: GitHub's JavaScript actions do not
+  # run inside Alpine containers on arm64.
+  node-test:
+    name: Node.js test / ${{ matrix.platform.package }}
+    needs: node-package
+    runs-on: ${{ matrix.platform.runner }}
+    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: ubuntu-latest
+            package: linux-x64-gnu
+          - runner: ubuntu-24.04-arm
+            package: linux-arm64-gnu
+          - runner: ubuntu-latest
+            package: linux-x64-musl
+            container: node:22-alpine
+          - runner: ubuntu-24.04-arm
+            package: linux-arm64-musl
+            container: node:22-alpine
+          - runner: macos-15-intel
+            package: darwin-x64
+          - runner: macos-14
+            package: darwin-arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: node-packages
+          path: dist
+      - if: matrix.platform.container == ''
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          package-manager-cache: false
+      - name: Install and run the packages
+        env:
+          PACKAGE: ${{ matrix.platform.package }}
+          CONTAINER: ${{ matrix.platform.container }}
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          set -- bindings/node/scripts/install-check.sh "dist/ethereum-lean-pq-$version.tgz" "dist/ethereum-lean-pq-$PACKAGE-$version.tgz" --aggregate
+          if [ -n "$CONTAINER" ]; then
+            docker run --rm -v "$PWD:/w" -w /w "$CONTAINER" sh "$@"
+          else
+            sh "$@"
+          fi
+
+  # npm trusted publishing (OIDC); provenance is generated automatically. Each package's trusted
+  # publisher on npmjs.com names:
+  #   repo:        ethereum/lean-pq-bindings
+  #   workflow:    release.yml
+  #   environment: npm          (must match `environment.name` below)
+  # npm can only attach a trusted publisher to a package that already exists; see
+  # bindings/node/README.md for the one-time bootstrap. Already-published versions are skipped,
+  # so a failed run can be re-dispatched on the same tag.
+  node-publish:
+    name: Publish to npm
+    needs: [node-package, node-test]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/@ethereum/lean-pq
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: node-packages
+          path: dist
+      # Trusted publishing needs npm 11.5.1+, which Node.js 24 ships. No registry-url: npm
+      # exchanges the OIDC token itself, and setup-node's placeholder token would only get in the way.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Publish platform packages, then the root package
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          case "$version" in *-*) tag=next ;; *) tag=latest ;; esac
+          root="dist/ethereum-lean-pq-$version.tgz"
+          publish() {
+            name=$(tar -xzOf "$1" package/package.json | node -p 'JSON.parse(require("fs").readFileSync(0)).name')
+            if [ "$(npm view "$name@$version" version 2>/dev/null)" = "$version" ]; then
+              echo "$name@$version is already published"
+            else
+              npm publish "$1" --access public --provenance --tag "$tag"
+            fi
+          }
+          for tarball in dist/*.tgz; do
+            if [ "$tarball" != "$root" ]; then publish "$tarball"; fi
+          done
+          publish "$root"
