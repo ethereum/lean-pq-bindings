@@ -29,6 +29,7 @@ dev = ["maturin>=1.7,<2.0", "pytest>=8", "mypy>=1.10"]
 [project.urls]
 Repository = "https://github.com/ethereum/lean-pq-bindings"
 Issues = "https://github.com/ethereum/lean-pq-bindings/issues"
+Changelog = "https://github.com/ethereum/lean-pq-bindings/blob/main/bindings/python/CHANGELOG.md"
 Upstream = "https://github.com/leanEthereum/leanVM"
 
 [tool.maturin]
