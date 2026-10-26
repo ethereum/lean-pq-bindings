@@ -17,39 +17,129 @@ The public API is a named Java module, `org.ethereum.leanpq`, built on Java's fi
 Function & Memory API (FFM/Panama). Native objects are wrapped in `AutoCloseable` types; use
 try-with-resources for `XmssSecretKey`, `SphincsSecretKey`, and `Aggregate`.
 
-This is a source binding, not yet a published Maven artifact. Gradle builds the matching Rust
-shared library before running tests.
+## Install
 
-## Requirements
+Published on Maven Central as `io.github.crate-crypto:lean-pq`; its version matches the
+repository's release tag (`vX.Y.Z` is `X.Y.Z`). It needs JDK 25.
 
-- JDK 25
-- Gradle 9.1 or newer
-- Rust (stable toolchain)
+Gradle (Kotlin DSL):
+
+```kotlin
+dependencies {
+    implementation("io.github.crate-crypto:lean-pq:X.Y.Z")
+}
+```
+
+Maven:
+
+```xml
+<dependency>
+  <groupId>io.github.crate-crypto</groupId>
+  <artifactId>lean-pq</artifactId>
+  <version>X.Y.Z</version>
+</dependency>
+```
+
+## Native-access permission
+
+The library is a named module, `org.ethereum.leanpq`. A modular application grants it native
+access narrowly:
+
+```sh
+java --enable-native-access=org.ethereum.leanpq ...
+```
+
+On the class path the library is part of the unnamed module, so the flag becomes
+`--enable-native-access=ALL-UNNAMED`. Gradle's JUnit runner executes on the class path, so the
+repository test task uses that broader form.
+
+## Native library
+
+The jar bundles the native library for:
+
+| Platform | Resource in the jar |
+| --- | --- |
+| Linux x86_64, glibc 2.17 or newer (CPU with AVX2 and PCLMULQDQ) | `org/ethereum/leanpq/native/linux-x86_64/liblean_pq_native.so` |
+| Linux aarch64, glibc 2.17 or newer | `org/ethereum/leanpq/native/linux-aarch64/liblean_pq_native.so` |
+| macOS arm64 and x86_64 (one universal library; x86_64 needs AVX2 and PCLMULQDQ) | `org/ethereum/leanpq/native/macos-universal/liblean_pq_native.dylib` |
+
+On first use the library is copied into a new owner-only directory under `java.io.tmpdir`,
+loaded, and the copy deleted; that directory must allow executable mappings. Other platforms,
+including musl-based Linux and Windows, fail with an error naming the platform.
+
+To load a different build instead, set `-Dlean.pq.native.path=/path/to/liblean_pq_native.so`
+(or `.dylib`) before first use; the bundled libraries are then ignored. Build one with
+`cargo build --release -p lean-pq-native` from the repository root.
 
 ## Build and test
 
-From the repository root:
+Requirements: JDK 25, Gradle 9.1 or newer, and Rust (stable toolchain). From the repository root:
 
 ```sh
 gradle -p bindings/java test
 ```
 
 The test task builds the shared `lean_pq_native` library in release mode (debug builds of leanVM
-prove roughly 30x slower) and supplies its path through `-Dlean.pq.native.path`.
-Applications embedding the library must similarly build or package a platform-specific native
-library and set that property before first use. One aggregation takes seconds and roughly 1.6 GB
-of memory.
+prove roughly 30x slower) and supplies its path through `-Dlean.pq.native.path`. One aggregation
+takes seconds and roughly 1.6 GB of memory.
 
-## Native-access permission
+`gradle -p bindings/java jar` bundles the freshly built host library only. To bundle prebuilt
+libraries instead, pass `-PleanPqNativeDir=DIR`, where `DIR/<platform>/` holds the library for each
+platform in the table above; `scripts/build-native.sh <platform> DIR` builds one (the Linux builds
+need [Zig 0.15.2](https://ziglang.org/download/) and `cargo install cargo-zigbuild`, the macOS
+build needs a Mac). Local builds have version `0.0.0-SNAPSHOT`; `-Pversion=X.Y.Z` overrides it.
 
-The library is a named module. A deployed modular application should grant native access narrowly:
+`scripts/consumer-smoke.sh [GRADLE_ARGS...]` publishes the artifact to a throwaway Maven
+repository, builds a fresh modular project depending on `io.github.crate-crypto:lean-pq` from it,
+and runs that project with `--enable-native-access=org.ethereum.leanpq` and no
+`lean.pq.native.path`, signing, verifying and aggregating with both schemes. CI runs it on
+Linux x86_64; set `GRADLE` if Gradle is not on `PATH`.
 
-```sh
-java --enable-native-access=org.ethereum.leanpq ...
-```
+## Releasing
 
-Gradle's JUnit runner executes on the class path, so the repository test task instead uses
-`--enable-native-access=ALL-UNNAMED`. This broader permission is test-harness-only.
+`.github/workflows/release.yml` publishes on every `vX.Y.Z` tag: `java-native` builds and checks
+each platform's library, and `java-publish` bundles all three in the jar, runs the consumer smoke
+against it, then signs and uploads it to the Central Portal, releasing it once the Portal validates
+the deployment. A version can be published only once.
+
+One-time setup, with the `io.github.crate-crypto` namespace verified on
+[central.sonatype.com](https://central.sonatype.com/publishing/namespaces):
+
+1. Generate a Portal user token: sign in to the Central Portal, open
+   <https://central.sonatype.com/usertoken>, press **Generate User Token**, and copy the username
+   and password it shows once.
+2. Generate a signing key and publish its public half:
+
+   ```sh
+   gpg --quick-generate-key "lean-pq release signing <maintainer@example.org>" rsa4096 sign 2y
+   gpg --list-secret-keys --keyid-format long    # note the 40-hex-digit fingerprint
+   gpg --armor --export FINGERPRINT > lean-pq-signing.asc
+   ```
+
+   Upload `lean-pq-signing.asc` at <https://keys.openpgp.org/upload> and confirm the verification
+   e-mail so the key is published with its identity (or
+   `gpg --keyserver keys.openpgp.org --send-keys FINGERPRINT`, then request verification on that
+   site). Central looks the key up there to check signatures.
+3. Export the private key, ASCII-armored:
+
+   ```sh
+   gpg --armor --export-secret-keys FINGERPRINT
+   ```
+
+4. Add the repository secrets (Settings → Secrets and variables → Actions):
+
+   | Secret | Value |
+   | --- | --- |
+   | `MAVEN_CENTRAL_USERNAME` | the user token's username |
+   | `MAVEN_CENTRAL_PASSWORD` | the user token's password |
+   | `SIGNING_KEY` | the whole exported private key, including the `BEGIN`/`END` lines |
+   | `SIGNING_PASSWORD` | the key's passphrase |
+
+The workflow passes them to the [`com.vanniktech.maven.publish`](https://vanniktech.github.io/gradle-maven-publish-plugin/central/)
+Gradle plugin as `ORG_GRADLE_PROJECT_mavenCentralUsername`, `ORG_GRADLE_PROJECT_mavenCentralPassword`,
+`ORG_GRADLE_PROJECT_signingInMemoryKey` and `ORG_GRADLE_PROJECT_signingInMemoryKeyPassword`.
+Builds without `signingInMemoryKey` skip signing. Before the key expires, extend it with
+`gpg --quick-set-expire FINGERPRINT 2y`, upload the public key again, and update `SIGNING_KEY`.
 
 ## Sign and verify
 

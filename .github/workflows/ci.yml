@@ -98,6 +98,11 @@ jobs:
       - name: Test Java bindings
         run: gradle -p bindings/java test
 
+      # Publishes the jar (bundling the host-built library) to a throwaway Maven repository and runs a
+      # fresh modular consumer of io.github.crate-crypto:lean-pq without lean.pq.native.path.
+      - name: Run a Maven consumer of the Java bindings
+        run: sh bindings/java/scripts/consumer-smoke.sh
+
   node:
     name: Node.js
     runs-on: ubuntu-latest

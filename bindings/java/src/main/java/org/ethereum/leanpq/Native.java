@@ -1,5 +1,8 @@
 package org.ethereum.leanpq;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.lang.foreign.Arena;
 import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.Linker;
@@ -9,6 +12,7 @@ import java.lang.foreign.SymbolLookup;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
@@ -29,7 +33,8 @@ final class Native {
     private static final MemoryLayout BUFFER = MemoryLayout.structLayout(ValueLayout.ADDRESS, SIZE);
     private static final Linker LINKER = Linker.nativeLinker();
     private static final Arena LIBRARY_ARENA = Arena.ofShared();
-    private static final SymbolLookup LIBRARY = SymbolLookup.libraryLookup(nativePath(), LIBRARY_ARENA);
+    private static final String NATIVE_PATH_PROPERTY = "lean.pq.native.path";
+    private static final SymbolLookup LIBRARY = loadLibrary();
 
     private static final FunctionDescriptor HANDLE_TO_BUFFER = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS);
     private static final FunctionDescriptor BYTES_TO_HANDLE = FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, SIZE, ValueLayout.ADDRESS);
@@ -199,12 +204,59 @@ final class Native {
         invoke(AGGREGATE_DESTROY, pointer);
     }
 
-    private static Path nativePath() {
-        String path = System.getProperty("lean.pq.native.path");
-        if (path == null || path.isBlank()) {
-            throw new IllegalStateException("set -Dlean.pq.native.path to the lean-pq native library");
+    /**
+     * Loads {@code -Dlean.pq.native.path} when set; otherwise extracts the library bundled in this jar
+     * for the current platform into a private temporary directory and loads it from there.
+     */
+    private static SymbolLookup loadLibrary() {
+        String override = System.getProperty(NATIVE_PATH_PROPERTY);
+        if (override != null && !override.isBlank()) {
+            return SymbolLookup.libraryLookup(Path.of(override).toAbsolutePath(), LIBRARY_ARENA);
         }
-        return Path.of(path).toAbsolutePath();
+        String platform = bundledPlatform();
+        String library = platform.startsWith("macos") ? "liblean_pq_native.dylib" : "liblean_pq_native.so";
+        try (InputStream bundled = Native.class.getResourceAsStream("native/" + platform + "/" + library)) {
+            if (bundled == null) {
+                throw new IllegalStateException("this lean-pq jar bundles no native library for " + platform
+                    + "; set -D" + NATIVE_PATH_PROPERTY + " to a lean-pq native library built for this platform");
+            }
+            // createTempDirectory makes an owner-only directory on POSIX file systems.
+            Path directory = Files.createTempDirectory("lean-pq-");
+            Path file = directory.resolve(library);
+            try {
+                Files.copy(bundled, file);
+                return SymbolLookup.libraryLookup(file, LIBRARY_ARENA);
+            } catch (IllegalArgumentException error) {
+                throw new IllegalStateException("could not load the bundled lean-pq native library for " + platform
+                    + " (Linux builds need glibc 2.17 or newer); set -D" + NATIVE_PATH_PROPERTY
+                    + " to a lean-pq native library built for this system", error);
+            } finally {
+                // The loaded library stays mapped after its file is removed, so nothing is left behind.
+                Files.deleteIfExists(file);
+                Files.deleteIfExists(directory);
+            }
+        } catch (IOException error) {
+            throw new UncheckedIOException("could not extract the bundled lean-pq native library", error);
+        }
+    }
+
+    /** Names the jar's native resource directory for this JVM's platform. */
+    private static String bundledPlatform() {
+        String os = System.getProperty("os.name", "");
+        String arch = System.getProperty("os.arch", "");
+        if (os.startsWith("Mac OS X")) {
+            // One universal library carries both the x86_64 and arm64 slices.
+            return "macos-universal";
+        }
+        if (os.equals("Linux") && (arch.equals("amd64") || arch.equals("x86_64"))) {
+            return "linux-x86_64";
+        }
+        if (os.equals("Linux") && arch.equals("aarch64")) {
+            return "linux-aarch64";
+        }
+        throw new IllegalStateException("lean-pq bundles native libraries for Linux x86_64 and aarch64 (glibc) and macOS"
+            + " (x86_64 and arm64), not " + os + " " + arch + "; set -D" + NATIVE_PATH_PROPERTY
+            + " to a lean-pq native library built for this platform");
     }
 
     private static MethodHandle downcall(String name, FunctionDescriptor descriptor) {

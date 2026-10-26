@@ -1,1 +1,8 @@
-rootProject.name = "lean-pq-java"
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "lean-pq"

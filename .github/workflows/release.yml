@@ -431,3 +431,111 @@ jobs:
             if [ "$tarball" != "$root" ]; then publish "$tarball"; fi
           done
           publish "$root"
+
+  # One shared library per platform bundled in the Maven jar, laid out as native/<platform>/ for
+  # -PleanPqNativeDir; the Linux builds link against glibc 2.17 and build-native.sh rejects newer
+  # symbol versions. Each leg also runs a consumer against a jar bundling just its own library, so
+  # every library is loaded on its own platform before anything is published.
+  java-native:
+    name: Java native / ${{ matrix.platform.name }}
+    runs-on: ${{ matrix.platform.runner }}
+    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: linux-x86_64
+            runner: ubuntu-latest
+            rust_targets: x86_64-unknown-linux-gnu
+          - name: linux-aarch64
+            runner: ubuntu-24.04-arm
+            rust_targets: aarch64-unknown-linux-gnu
+          - name: macos-universal
+            runner: macos-14
+            rust_targets: x86_64-apple-darwin aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Add Rust target support
+        run: rustup target add ${{ matrix.platform.rust_targets }}
+      - if: runner.os == 'Linux'
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+      - name: Install cargo-zigbuild
+        if: runner.os == 'Linux'
+        run: cargo install cargo-zigbuild --locked
+      - name: Build the native library
+        run: sh bindings/java/scripts/build-native.sh ${{ matrix.platform.name }} native
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.3.1"
+      - name: Run a consumer against a jar bundling this library
+        run: sh bindings/java/scripts/consumer-smoke.sh -Pversion="${GITHUB_REF_NAME#v}" -PleanPqNativeDir="$PWD/native"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: java-native-${{ matrix.platform.name }}
+          path: native/${{ matrix.platform.name }}/
+          if-no-files-found: error
+
+  # Assembles io.github.crate-crypto:lean-pq with all three libraries, runs the consumer against it
+  # and publishes it to Maven Central through the Central Portal. The plugin signs every file and
+  # releases the deployment once the Portal validates it. See bindings/java/README.md for the secrets.
+  java-publish:
+    name: Publish to Maven Central
+    needs: java-native
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: native
+          pattern: java-native-*
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.3.1"
+      - name: Assemble the jar
+        run: |
+          for dir in native/java-native-*; do mv "$dir" "native/${dir#native/java-native-}"; done
+          version=${GITHUB_REF_NAME#v}
+          gradle -p bindings/java jar -Pversion="$version" -PleanPqNativeDir="$PWD/native"
+          unzip -Z1 "bindings/java/build/libs/lean-pq-$version.jar" | tee jar-contents.txt
+          for library in linux-x86_64/liblean_pq_native.so linux-aarch64/liblean_pq_native.so macos-universal/liblean_pq_native.dylib; do
+            grep -qx "org/ethereum/leanpq/native/$library" jar-contents.txt
+          done
+          file native/macos-universal/liblean_pq_native.dylib | grep -q 'Mach-O universal binary with 2 architectures'
+      - name: Run a consumer against the jar
+        run: sh bindings/java/scripts/consumer-smoke.sh -Pversion="${GITHUB_REF_NAME#v}" -PleanPqNativeDir="$PWD/native"
+      - name: Check Maven Central secrets
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+        run: |
+          missing=0
+          for name in MAVEN_CENTRAL_USERNAME MAVEN_CENTRAL_PASSWORD SIGNING_KEY SIGNING_PASSWORD; do
+            if [ -z "$(printenv "$name")" ]; then
+              echo "::error::repository secret $name is not set; see bindings/java/README.md"
+              missing=1
+            fi
+          done
+          exit "$missing"
+      - name: Publish to Maven Central
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
+        run: gradle -p bindings/java publishToMavenCentral -Pversion="${GITHUB_REF_NAME#v}" -PleanPqNativeDir="$PWD/native"

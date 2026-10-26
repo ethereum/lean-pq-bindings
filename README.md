@@ -22,6 +22,13 @@ The release workflow publishes the Python package to PyPI:
 python -m pip install py-lean-pq
 ```
 
+The release workflow also publishes the Node.js package to npm, with prebuilt binaries for Linux
+x64/arm64 (glibc and musl) and macOS x64/arm64:
+
+```sh
+npm install @ethereum/lean-pq
+```
+
 Rust applications can consume the safe facade directly from this repository:
 
 ```toml
@@ -36,9 +43,17 @@ Linux x86_64/aarch64 (glibc) and macOS:
 zig fetch --save=lean_pq https://github.com/ethereum/lean-pq-bindings/releases/download/v<version>/lean-pq-zig-<version>.tar.gz
 ```
 
-The remaining bindings are source integrations today. Clone the repository, then follow the
-binding-specific instructions below; they build against the repository's pinned leanVM API rather
-than requiring applications to choose its Rust dependencies themselves.
+Java 25 applications depend on `io.github.crate-crypto:lean-pq` from Maven Central. The jar bundles
+native libraries for Linux x86_64/aarch64 (glibc 2.17+) and macOS; run with
+`--enable-native-access=org.ethereum.leanpq`:
+
+```kotlin
+implementation("io.github.crate-crypto:lean-pq:<version>")
+```
+
+Go is a source integration today. Clone the repository, then follow the binding-specific
+instructions below; the bindings build against the repository's pinned leanVM API rather than
+requiring applications to choose its Rust dependencies themselves.
 
 ```sh
 git clone https://github.com/ethereum/lean-pq-bindings.git
@@ -47,8 +62,8 @@ cd lean-pq-bindings
 
 | Binding | Upstream integration | Prerequisites |
 | --- | --- | --- |
-| [Java 25](bindings/java/README.md) | Run `gradle -p bindings/java test` to build the native library and validate the module. Package a target-specific native library with an application and provide `-Dlean.pq.native.path=…`. | JDK 25, Gradle 9.1+, Rust |
-| [Node.js](bindings/node/README.md) | Run `npm ci && npm run build` in `bindings/node`, then consume the built local package. | Node.js 18.17+, Rust |
+| [Java 25](bindings/java/README.md) | Depend on `io.github.crate-crypto:lean-pq` (see above), or run `gradle -p bindings/java test` for a local build. | JDK 25; Gradle 9.1+ and Rust for source builds |
+| [Node.js](bindings/node/README.md) | Run `npm install @ethereum/lean-pq`, or `npm ci && npm run build` in `bindings/node` for a local build. | Node.js 18.17+; Rust for source builds |
 | [Go](bindings/go/README.md) | Stage the target-specific Rust archive, then use the local Go module. | Go 1.24+, cgo, Zig, `cargo-zigbuild` |
 | [Zig](bindings/zig/README.md) | Use the release package above, or stage the target-specific Rust archive and invoke `zig build … -Dnative-dir=…`. | Zig 0.16+; `cargo-zigbuild` for source builds |
 
@@ -62,7 +77,7 @@ sh bindings/native/scripts/stage-static.sh x86_64-unknown-linux-gnu /tmp/lean-pq
 
 Pass that directory as `-Dnative-dir=/tmp/lean-pq-native` for Zig. Go stages the same archive
 under its package's `internal/native/linux_amd64` directory; its README gives the exact platform
-layouts. Release packaging for Go archives, npm, and Maven is not available yet.
+layouts. Release packaging for Go archives is not available yet.
 
 Each binding uses a language-native wrapper around the Rust implementation. The internal
 [`bindings/native`](bindings/native/README.md) crate supplies a private C-shaped Rust ABI for
