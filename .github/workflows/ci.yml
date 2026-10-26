@@ -131,10 +131,12 @@ jobs:
             runner: ubuntu-latest
             rust_targets: x86_64-unknown-linux-gnu
             target: x86_64-unknown-linux-gnu
+            bundle_dir: x86_64-linux-gnu
           - name: macOS universal
             runner: macos-14
             rust_targets: x86_64-apple-darwin aarch64-apple-darwin
             target: universal2-apple-darwin
+            bundle_dir: universal-macos
     runs-on: ${{ matrix.platform.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -166,6 +168,13 @@ jobs:
       - name: Test Zig bindings
         run: zig build test -Dnative-dir=.native
         working-directory: bindings/zig
+
+      - name: Package and consume the Zig release tarball
+        run: |
+          mkdir -p "$RUNNER_TEMP/native/${{ matrix.platform.bundle_dir }}"
+          cp bindings/zig/.native/liblean_pq_native.a "$RUNNER_TEMP/native/${{ matrix.platform.bundle_dir }}/"
+          sh bindings/zig/scripts/package.sh 0.0.0 "$RUNNER_TEMP/native" "$RUNNER_TEMP/lean-pq-zig.tar.gz"
+          sh bindings/zig/scripts/consumer-smoke.sh "$RUNNER_TEMP/lean-pq-zig.tar.gz"
 
   go:
     name: Go cgo / ${{ matrix.platform.name }}

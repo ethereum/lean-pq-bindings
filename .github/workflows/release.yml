@@ -131,7 +131,80 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: dist
+          pattern: wheels-*
           merge-multiple: true
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist
+
+  # Static native bridge per bundled Zig target; directory names match build.zig.
+  zig-native:
+    name: Zig native / ${{ matrix.platform.bundle_dir }}
+    runs-on: ${{ matrix.platform.runner }}
+    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: ubuntu-latest
+            rust_targets: x86_64-unknown-linux-gnu
+            target: x86_64-unknown-linux-gnu
+            bundle_dir: x86_64-linux-gnu
+          - runner: ubuntu-latest
+            rust_targets: aarch64-unknown-linux-gnu
+            target: aarch64-unknown-linux-gnu
+            bundle_dir: aarch64-linux-gnu
+          - runner: macos-14
+            rust_targets: x86_64-apple-darwin aarch64-apple-darwin
+            target: universal2-apple-darwin
+            bundle_dir: universal-macos
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      # cargo-zigbuild needs Zig 0.15.2 for cross-target Apple builds.
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+      - name: Install cargo-zigbuild
+        run: cargo install cargo-zigbuild --locked
+      - name: Add Rust target support
+        run: rustup target add ${{ matrix.platform.rust_targets }}
+      - name: Stage static native bridge
+        run: sh bindings/native/scripts/stage-static.sh ${{ matrix.platform.target }} native/${{ matrix.platform.bundle_dir }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zig-native-${{ matrix.platform.bundle_dir }}
+          path: native/${{ matrix.platform.bundle_dir }}/liblean_pq_native.a
+          if-no-files-found: error
+
+  # The Zig package consumers add with `zig fetch --save URL`, attached to the GitHub release.
+  zig-package:
+    name: Zig package
+    needs: zig-native
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: native
+          pattern: zig-native-*
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - name: Assemble package
+        run: |
+          for dir in native/zig-native-*; do mv "$dir" "native/${dir#native/zig-native-}"; done
+          version=${GITHUB_REF_NAME#v}
+          sh bindings/zig/scripts/package.sh "$version" native "dist/lean-pq-zig-$version.tar.gz" | tee package.log
+          for target in x86_64-linux-gnu aarch64-linux-gnu universal-macos; do
+            grep -qx "bundled $target" package.log
+          done
+      - name: Build and run a consumer against the package
+        run: sh bindings/zig/scripts/consumer-smoke.sh "dist/lean-pq-zig-${GITHUB_REF_NAME#v}.tar.gz"
+      - name: Attach to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" "dist/lean-pq-zig-${GITHUB_REF_NAME#v}.tar.gz" --clobber

@@ -1,5 +1,5 @@
 const std = @import("std");
-const lpq = @import("lean_pq.zig");
+const lpq = @import("lean_pq");
 
 const message: lpq.Message = [_]u8{0x42} ** 32;
 const other_message: lpq.Message = [_]u8{0x43} ** 32;

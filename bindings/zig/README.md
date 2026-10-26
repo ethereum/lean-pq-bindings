@@ -14,13 +14,27 @@ Public keys and messages are `[32]u8`; signatures are `[2404]u8` (leanXMSS) and 
 `sphincsClaims` belong to the caller's allocator.
 
 The binding links a target-matched static `liblean_pq_native.a` produced by the shared Rust
-bridge. It supports Linux x86_64/aarch64 and universal macOS archives. The archive is an
-implementation detail of this binding, not a public C API.
+bridge. Release packages bundle it for Linux x86_64 and aarch64 (glibc) and macOS (universal).
+The archive is an implementation detail of this binding, not a public C API.
 
-## Requirements
+## Install
 
-- Zig 0.16 or newer
-- A target-matched `liblean_pq_native.a`
+Each GitHub release attaches `lean-pq-zig-<version>.tar.gz`, a Zig package with the native
+archives bundled. Zig 0.16 or newer:
+
+```sh
+zig fetch --save=lean_pq https://github.com/ethereum/lean-pq-bindings/releases/download/v<version>/lean-pq-zig-<version>.tar.gz
+```
+
+Then import the module in `build.zig`:
+
+```zig
+const lean_pq = b.dependency("lean_pq", .{ .target = target, .optimize = optimize });
+exe.root_module.addImport("lean_pq", lean_pq.module("lean_pq"));
+```
+
+The package picks the bundled archive for the build target. For any other target, build
+`liblean_pq_native.a` yourself and pass its directory as `-Dnative-dir=...`.
 
 ## Build from this repository
 
@@ -37,8 +51,9 @@ zig build test -Dnative-dir=.native
 ```
 
 For Linux aarch64, stage `aarch64-unknown-linux-gnu`; for macOS, stage
-`universal2-apple-darwin` on macOS after adding both Apple Rust targets. The release process can
-provide those same static archives instead of building them locally.
+`universal2-apple-darwin` on macOS after adding both Apple Rust targets.
+`scripts/package.sh` assembles a release package from staged archives, and
+`scripts/consumer-smoke.sh` proves one works as a `zig fetch` dependency.
 
 ## Example
 
