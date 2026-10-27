@@ -38,6 +38,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-14]
         python: ["3.11", "3.12", "3.13", "3.14"]
+        # One Windows row keeps CI affordable; the release workflow tests every Windows wheel.
+        include:
+          - os: windows-latest
+            python: "3.14"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

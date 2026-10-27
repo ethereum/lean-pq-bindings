@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   # manylinux2014 wheels for glibc-based Linux distros (the common case)
-  # plus macOS. Linux x86_64 and aarch64 cover the realistic install base
+  # plus macOS and Windows. Linux x86_64 and aarch64 cover the realistic install base
   # for v0.0.x; add x86/armv7/s390x/ppc64le later if anyone asks.
   build:
     name: ${{ matrix.platform.runner }} / ${{ matrix.platform.target }}
@@ -38,6 +38,9 @@ jobs:
             target: aarch64
           - runner: macos-14
             target: aarch64
+          # x86_64-pc-windows-msvc; .cargo/config.toml links the C runtime statically.
+          - runner: windows-latest
+            target: x64
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -95,7 +98,7 @@ jobs:
           path: dist/*.whl
 
   # Source distribution as a fallback for platforms we don't ship wheels
-  # for (Windows, less-common archs, etc.). pip falls back to sdist when
+  # for (less-common archs, etc.). pip falls back to sdist when
   # no compatible wheel exists; users get a from-source build.
   sdist:
     name: sdist
@@ -113,9 +116,52 @@ jobs:
           name: wheels-sdist
           path: dist/*.tar.gz
 
+  # Installs the Windows wheels into a fresh virtualenv straight from the build artifact (no index,
+  # no source builds) and signs, verifies and aggregates through them before anything is published.
+  windows-wheel-test:
+    name: windows-latest / py${{ matrix.python }} wheel
+    needs: build
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every interpreter --find-interpreter builds a Windows wheel for (the runner image adds 3.15).
+        python: ["3.11", "3.12", "3.13", "3.14", "3.15"]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheels-windows-latest-x64
+          path: dist
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Check the extensions load without the Visual C++ runtime
+        run: |
+          # One matrix row per wheel, so a wheel for an interpreter missing from the matrix fails here.
+          ls dist/*.whl
+          test "$(ls dist/*.whl | wc -l)" -eq "${{ strategy.job-total }}"
+          python -m pip install pefile
+          python bindings/python/scripts/check-windows-imports.py dist/*.whl
+      - name: Install the wheel into a fresh virtualenv
+        run: |
+          venv="$(cygpath -u "$RUNNER_TEMP")/venv"
+          python -m venv "$venv"
+          "$venv/Scripts/python" -m pip install --only-binary :all: --no-index --find-links dist py-lean-pq
+          "$venv/Scripts/python" -m pip install --only-binary :all: pytest
+      - name: Sign, verify and aggregate through the installed wheel
+        working-directory: ${{ runner.temp }}
+        run: |
+          python="$(cygpath -u "$RUNNER_TEMP")/venv/Scripts/python"
+          "$python" -c "import pathlib, sys, py_lean_pq; print(py_lean_pq.__file__); assert pathlib.Path(py_lean_pq.__file__).is_relative_to(sys.prefix)"
+          "$python" -m pytest "$GITHUB_WORKSPACE/bindings/python/tests/test_lean_pq.py" -v
+
   publish:
     name: Publish to PyPI
-    needs: [build, musllinux, sdist]
+    needs: [build, musllinux, sdist, windows-wheel-test]
     runs-on: ubuntu-latest
     # PyPI Trusted Publishing. Pending publisher configured at
     # https://pypi.org/manage/account/publishing/  (account-level — used
