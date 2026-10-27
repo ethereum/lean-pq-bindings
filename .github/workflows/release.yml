@@ -240,6 +240,11 @@ jobs:
             target: x86_64-apple-darwin
           - runner: macos-14
             target: aarch64-apple-darwin
+          # cargo-xwin links against the MSVC CRT and Windows SDK; .cargo/config.toml links the C
+          # runtime statically.
+          - runner: ubuntu-latest
+            target: x86_64-pc-windows-msvc
+            build_args: --cross-compile
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v5
@@ -249,13 +254,19 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.platform.target }}
-      - if: matrix.platform.build_args == '--cross-compile'
+      - if: endsWith(matrix.platform.target, '-musl')
         uses: mlugg/setup-zig@v2
         with:
           version: 0.15.2
       - name: Install cargo-zigbuild
-        if: matrix.platform.build_args == '--cross-compile'
+        if: endsWith(matrix.platform.target, '-musl')
         run: cargo install cargo-zigbuild --locked
+      # llvm-tools provides llvm-objdump for the import check below.
+      - name: Install cargo-xwin
+        if: endsWith(matrix.platform.target, '-msvc')
+        run: |
+          rustup component add llvm-tools
+          cargo install cargo-xwin --locked
       - name: Build
         working-directory: bindings/node
         env:
@@ -268,6 +279,20 @@ jobs:
           npm version "${RELEASE_TAG#v}" --no-git-tag-version
           npm ci
           npx napi build --platform --release --target "$TARGET" ${BUILD_ARGS:+"$BUILD_ARGS"}
+      # Static CRT check: the addon must load without the Visual C++ redistributable, so it may
+      # import system DLLs but no VCRUNTIME*.dll or MSVCP*.dll.
+      - name: Check the addon's DLL imports
+        if: endsWith(matrix.platform.target, '-msvc')
+        working-directory: bindings/node
+        run: |
+          objdump="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/^host: //p')/bin/llvm-objdump"
+          imports=$("$objdump" -p lean_pq_node.win32-x64-msvc.node | sed -n 's/^ *DLL Name: //p')
+          echo "$imports"
+          test -n "$imports"
+          if echo "$imports" | grep -i -e '^vcruntime' -e '^msvcp'; then
+            echo "lean_pq_node.win32-x64-msvc.node imports the Visual C++ runtime" >&2
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: node-binding-${{ matrix.platform.target }}
@@ -371,6 +396,8 @@ jobs:
             package: darwin-x64
           - runner: macos-14
             package: darwin-arm64
+          - runner: windows-latest
+            package: win32-x64-msvc
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -383,6 +410,7 @@ jobs:
           node-version: "22"
           package-manager-cache: false
       - name: Install and run the packages
+        shell: bash
         env:
           PACKAGE: ${{ matrix.platform.package }}
           CONTAINER: ${{ matrix.platform.container }}
