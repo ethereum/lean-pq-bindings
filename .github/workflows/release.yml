@@ -452,11 +452,16 @@ jobs:
 
   # One shared library per platform bundled in the Maven jar, laid out as native/<platform>/ for
   # -PleanPqNativeDir; the Linux builds link against glibc 2.17 and build-native.sh rejects newer
-  # symbol versions. Each leg also runs a consumer against a jar bundling just its own library, so
-  # every library is loaded on its own platform before anything is published.
+  # symbol versions, and the Windows build must import only DLLs that ship with Windows. Each leg
+  # also runs a consumer against a jar bundling just its own library, so every library is loaded on
+  # its own platform before anything is published.
   java-native:
     name: Java native / ${{ matrix.platform.name }}
     runs-on: ${{ matrix.platform.runner }}
+    defaults:
+      run:
+        # Git Bash on Windows.
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
@@ -470,6 +475,9 @@ jobs:
           - name: macos-universal
             runner: macos-14
             rust_targets: x86_64-apple-darwin aarch64-apple-darwin
+          - name: windows-x86_64
+            runner: windows-latest
+            rust_targets: x86_64-pc-windows-gnu
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -492,14 +500,14 @@ jobs:
         with:
           gradle-version: "9.3.1"
       - name: Run a consumer against a jar bundling this library
-        run: sh bindings/java/scripts/consumer-smoke.sh -Pversion="${RELEASE_TAG#v}" -PleanPqNativeDir="$PWD/native"
+        run: sh bindings/java/scripts/consumer-smoke.sh -Pversion="${RELEASE_TAG#v}" -PleanPqNativeDir="$GITHUB_WORKSPACE/native"
       - uses: actions/upload-artifact@v4
         with:
           name: java-native-${{ matrix.platform.name }}
           path: native/${{ matrix.platform.name }}/
           if-no-files-found: error
 
-  # Assembles io.github.crate-crypto:lean-pq with all three libraries, runs the consumer against it
+  # Assembles io.github.crate-crypto:lean-pq with all four libraries, runs the consumer against it
   # and publishes it to Maven Central through the Central Portal. The plugin signs every file and
   # releases the deployment once the Portal validates it. See bindings/java/README.md for the secrets.
   java-publish:
@@ -527,10 +535,11 @@ jobs:
           version=${RELEASE_TAG#v}
           gradle -p bindings/java jar -Pversion="$version" -PleanPqNativeDir="$PWD/native"
           unzip -Z1 "bindings/java/build/libs/lean-pq-$version.jar" | tee jar-contents.txt
-          for library in linux-x86_64/liblean_pq_native.so linux-aarch64/liblean_pq_native.so macos-universal/liblean_pq_native.dylib; do
+          for library in linux-x86_64/liblean_pq_native.so linux-aarch64/liblean_pq_native.so macos-universal/liblean_pq_native.dylib windows-x86_64/lean_pq_native.dll; do
             grep -qx "org/ethereum/leanpq/native/$library" jar-contents.txt
           done
           file native/macos-universal/liblean_pq_native.dylib | grep -q 'Mach-O universal binary with 2 architectures'
+          file native/windows-x86_64/lean_pq_native.dll | tee /dev/stderr | grep -q 'PE32+ executable.*DLL.*x86-64'
       - name: Run a consumer against the jar
         run: sh bindings/java/scripts/consumer-smoke.sh -Pversion="${RELEASE_TAG#v}" -PleanPqNativeDir="$PWD/native"
       - name: Check Maven Central secrets
