@@ -17,7 +17,7 @@ aggregates recursively. The proving parameters stay inside this crate.
 <!-- x-release-please-start-version -->
 ```toml
 [dependencies]
-lean-pq = { git = "https://github.com/ethereum/lean-pq-bindings.git", tag = "v0.6.2" }
+lean-pq = { git = "https://github.com/ethereum/lean-pq-bindings.git", tag = "v0.7.0" }
 ```
 <!-- x-release-please-end -->
 

@@ -25,7 +25,7 @@ archives bundled. Zig 0.16 or newer:
 
 <!-- x-release-please-start-version -->
 ```sh
-version=0.6.2
+version=0.7.0
 zig fetch --save=lean_pq "https://github.com/ethereum/lean-pq-bindings/releases/download/v$version/lean-pq-zig-$version.tar.gz"
 ```
 <!-- x-release-please-end -->
