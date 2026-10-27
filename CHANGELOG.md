@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/ethereum/lean-pq-bindings/compare/v0.6.2...v0.7.0) (2026-10-27)
+
+
+### Features
+
+* Windows x86-64 for every binding, and a Go module that needs no Rust ([#37](https://github.com/ethereum/lean-pq-bindings/issues/37)) ([5d6313c](https://github.com/ethereum/lean-pq-bindings/commit/5d6313c4e76184ac3f390f6b90e99aab23644d3c))
+
 ## [0.6.2](https://github.com/ethereum/lean-pq-bindings/compare/v0.6.1...v0.6.2) (2026-10-27)
 
 

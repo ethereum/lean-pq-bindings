@@ -27,7 +27,7 @@ Gradle (Kotlin DSL):
 <!-- x-release-please-start-version -->
 ```kotlin
 dependencies {
-    implementation("io.github.crate-crypto:lean-pq:0.6.2")
+    implementation("io.github.crate-crypto:lean-pq:0.7.0")
 }
 ```
 <!-- x-release-please-end -->
@@ -39,7 +39,7 @@ Maven:
 <dependency>
   <groupId>io.github.crate-crypto</groupId>
   <artifactId>lean-pq</artifactId>
-  <version>0.6.2</version>
+  <version>0.7.0</version>
 </dependency>
 ```
 <!-- x-release-please-end -->
