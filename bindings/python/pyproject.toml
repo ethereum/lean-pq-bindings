@@ -4,8 +4,8 @@ build-backend = "maturin"
 
 [project]
 name = "py-lean-pq"
-# Version lives in Cargo.toml; maturin reads it from there. Release Please
-# bumps the Cargo.toml version on each release PR.
+# The version is the workspace version in the repository's root Cargo.toml, which maturin reads
+# through Cargo; release-please sets it on each release PR.
 dynamic = ["version"]
 description = "Python bindings for leanVM's leanXMSS and leanSPHINCS post-quantum signatures and their recursive aggregation"
 readme = "README.md"
