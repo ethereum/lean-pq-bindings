@@ -38,6 +38,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-14]
         python: ["3.11", "3.12", "3.13", "3.14"]
+        # One Windows row keeps CI affordable; the release workflow tests every Windows wheel.
+        include:
+          - os: windows-latest
+            python: "3.14"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -102,6 +106,36 @@ jobs:
       # fresh modular consumer of io.github.crate-crypto:lean-pq without lean.pq.native.path.
       - name: Run a Maven consumer of the Java bindings
         run: sh bindings/java/scripts/consumer-smoke.sh
+
+  # The release's Windows build: x86_64-pc-windows-gnu, checked to import only DLLs Windows ships,
+  # then loaded from the jar through the per-user cache by a fresh modular consumer.
+  java-windows:
+    name: Java 25 / Windows
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build the Windows native library
+        run: sh bindings/java/scripts/build-native.sh windows-x86_64 native
+
+      - name: Run a Maven consumer of the Java bindings
+        run: sh bindings/java/scripts/consumer-smoke.sh -PleanPqNativeDir="$GITHUB_WORKSPACE/native"
 
   node:
     name: Node.js
@@ -225,7 +259,17 @@ jobs:
             target: universal2-apple-darwin
             archive_dir: bindings/go/internal/native/darwin_universal
             go_test_command: go test ./...
+          # cgo links with the runner's MinGW-w64 gcc.
+          - name: Windows amd64
+            runner: windows-latest
+            rust_targets: x86_64-pc-windows-gnu
+            target: x86_64-pc-windows-gnu
+            archive_dir: bindings/go/internal/native/windows_amd64
+            go_test_command: go test ./...
     runs-on: ${{ matrix.platform.runner }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 

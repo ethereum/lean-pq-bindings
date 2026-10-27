@@ -2,7 +2,8 @@
 # Assemble the Zig package tarball that consumers add with `zig fetch --save URL`.
 #
 # NATIVE_ROOT holds one directory per bundled target, each with liblean_pq_native.a:
-# x86_64-linux-gnu, aarch64-linux-gnu, universal-macos (the names build.zig selects from).
+# x86_64-linux-gnu, aarch64-linux-gnu, universal-macos, x86_64-windows-gnu (the names build.zig
+# selects from).
 set -eu
 
 if [ "$#" -ne 3 ]; then
@@ -29,15 +30,16 @@ root="$stage/lean-pq-zig-$version"
 mkdir -p "$root/native"
 
 cp "$package_dir/build.zig" "$package_dir/README.md" "$root/"
+cp "$package_dir/../../LICENSE-MIT" "$package_dir/../../LICENSE-APACHE" "$root/"
 cp -R "$package_dir/include" "$package_dir/src" "$root/"
 sed -e "s/^    \.version = \"[^\"]*\",$/    .version = \"$version\",/" \
-    -e 's/^    \.paths = \.{ \(.*\) },$/    .paths = .{ \1, "native" },/' \
+    -e 's/^    \.paths = \.{ \(.*\) },$/    .paths = .{ \1, "native", "LICENSE-MIT", "LICENSE-APACHE" },/' \
     "$package_dir/build.zig.zon" > "$root/build.zig.zon"
 grep -q "^    \.version = \"$version\",$" "$root/build.zig.zon"
-grep -q '"native" },$' "$root/build.zig.zon"
+grep -q '"native", "LICENSE-MIT", "LICENSE-APACHE" },$' "$root/build.zig.zon"
 
 bundled=0
-for target in x86_64-linux-gnu aarch64-linux-gnu universal-macos; do
+for target in x86_64-linux-gnu aarch64-linux-gnu universal-macos x86_64-windows-gnu; do
     if [ -f "$native_root/$target/liblean_pq_native.a" ]; then
         mkdir -p "$root/native/$target"
         install -m 0644 "$native_root/$target/liblean_pq_native.a" "$root/native/$target/liblean_pq_native.a"

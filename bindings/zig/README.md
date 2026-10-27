@@ -14,17 +14,21 @@ Public keys and messages are `[32]u8`; signatures are `[2404]u8` (leanXMSS) and 
 `sphincsClaims` belong to the caller's allocator.
 
 The binding links a target-matched static `liblean_pq_native.a` produced by the shared Rust
-bridge. Release packages bundle it for Linux x86_64 and aarch64 (glibc) and macOS (universal).
-The archive is an implementation detail of this binding, not a public C API.
+bridge. Release packages bundle it for Linux x86_64 and aarch64 (glibc), macOS (universal), and
+Windows x86_64 (MinGW). The archive is an implementation detail of this binding, not a public C
+API.
 
 ## Install
 
 Each GitHub release attaches `lean-pq-zig-<version>.tar.gz`, a Zig package with the native
 archives bundled. Zig 0.16 or newer:
 
+<!-- x-release-please-start-version -->
 ```sh
-zig fetch --save=lean_pq https://github.com/ethereum/lean-pq-bindings/releases/download/v<version>/lean-pq-zig-<version>.tar.gz
+version=0.6.2
+zig fetch --save=lean_pq "https://github.com/ethereum/lean-pq-bindings/releases/download/v$version/lean-pq-zig-$version.tar.gz"
 ```
+<!-- x-release-please-end -->
 
 Then import the module in `build.zig`:
 
@@ -35,6 +39,10 @@ exe.root_module.addImport("lean_pq", lean_pq.module("lean_pq"));
 
 The package picks the bundled archive for the build target. For any other target, build
 `liblean_pq_native.a` yourself and pass its directory as `-Dnative-dir=...`.
+
+On Windows the bundled archive targets the GNU ABI, `x86_64-windows-gnu`, which is Zig's native
+target there, so a plain `zig build` works; Zig supplies the MinGW-w64 libc. The MSVC ABI
+(`-Dtarget=x86_64-windows-msvc`) is not bundled.
 
 ## Build from this repository
 
@@ -51,7 +59,8 @@ zig build test -Dnative-dir=.native
 ```
 
 For Linux aarch64, stage `aarch64-unknown-linux-gnu`; for macOS, stage
-`universal2-apple-darwin` on macOS after adding both Apple Rust targets.
+`universal2-apple-darwin` on macOS after adding both Apple Rust targets; for Windows, stage
+`x86_64-pc-windows-gnu` (cross-builds from Linux).
 `scripts/package.sh` assembles a release package from staged archives, and
 `scripts/consumer-smoke.sh` proves one works as a `zig fetch` dependency.
 

@@ -50,13 +50,16 @@ tasks.test {
 // as DIR/<platform>/<library> for every bundled platform (see scripts/build-native.sh); local builds
 // bundle only the host library that buildNative produces.
 val prebuiltNativeDir = providers.gradleProperty("leanPqNativeDir").map { file(it) }
-val hostPlatform = when (osName) {
-    "Linux" -> when (System.getProperty("os.arch")) {
+val hostArch = System.getProperty("os.arch")
+val hostPlatform = when {
+    osName == "Linux" -> when (hostArch) {
         "amd64", "x86_64" -> "linux-x86_64"
         "aarch64" -> "linux-aarch64"
         else -> null
     }
-    else -> if (osName.startsWith("Mac OS X")) "macos-universal" else null
+    osName.startsWith("Mac OS X") -> "macos-universal"
+    osName.startsWith("Windows") && hostArch in setOf("amd64", "x86_64") -> "windows-x86_64"
+    else -> null
 }
 
 tasks.jar {
@@ -64,7 +67,7 @@ tasks.jar {
         from(prebuiltNativeDir) { into("org/ethereum/leanpq/native") }
     } else {
         val platform = hostPlatform ?: throw GradleException(
-            "lean-pq bundles no native library for $osName ${System.getProperty("os.arch")}; pass -PleanPqNativeDir")
+            "lean-pq bundles no native library for $osName $hostArch; pass -PleanPqNativeDir")
         dependsOn(buildNative)
         from(nativeLibrary) { into("org/ethereum/leanpq/native/$platform") }
     }
@@ -80,7 +83,7 @@ mavenPublishing {
     pom {
         name = "lean-pq"
         description = "Java bindings for leanVM's post-quantum signatures, leanXMSS and leanSPHINCS, " +
-            "and their zkVM-backed aggregation, with bundled native libraries for Linux and macOS."
+            "and their zkVM-backed aggregation, with bundled native libraries for Linux, macOS and Windows."
         url = "https://github.com/ethereum/lean-pq-bindings"
         licenses {
             license {

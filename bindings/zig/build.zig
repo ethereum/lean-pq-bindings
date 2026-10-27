@@ -25,6 +25,11 @@ pub fn build(b: *std.Build) void {
         lean_pq.linkSystemLibrary("unwind", .{});
     } else if (target.result.os.tag == .macos) {
         lean_pq.linkFramework("Foundation", .{});
+    } else if (target.result.os.tag == .windows) {
+        // The Rust standard library's imports (`--print native-static-libs`) and its unwinder.
+        for ([_][]const u8{ "kernel32", "ntdll", "userenv", "ws2_32", "dbghelp", "unwind" }) |name| {
+            lean_pq.linkSystemLibrary(name, .{});
+        }
     }
 
     const tests = b.addTest(.{
@@ -64,6 +69,8 @@ fn bundledNativeDir(target: std.Target) ?[]const u8 {
             .x86_64, .aarch64 => "native/universal-macos",
             else => null,
         },
+        // A MinGW archive; `x86_64-windows-gnu` is Zig's native target on Windows.
+        .windows => if (target.abi.isGnu() and target.cpu.arch == .x86_64) "native/x86_64-windows-gnu" else null,
         else => null,
     };
 }

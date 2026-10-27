@@ -15,9 +15,11 @@ decoding return Promises so their native work does not block the JavaScript even
 
 ## Install
 
+<!-- x-release-please-start-version -->
 ```sh
-npm install @kevaundray/lean-pq
+npm install @kevaundray/lean-pq@0.6.2
 ```
+<!-- x-release-please-end -->
 
 npm installs a prebuilt binary through a per-platform optional dependency, so installing needs
 no Rust toolchain. Prebuilt binaries cover Node.js 18.17 or later on:
@@ -30,8 +32,10 @@ no Rust toolchain. Prebuilt binaries cover Node.js 18.17 or later on:
 | Linux arm64, musl        | `@kevaundray/lean-pq-linux-arm64-musl` |
 | macOS x64                | `@kevaundray/lean-pq-darwin-x64`       |
 | macOS arm64              | `@kevaundray/lean-pq-darwin-arm64`     |
+| Windows x64              | `@kevaundray/lean-pq-win32-x64-msvc`   |
 
-The x64 binaries require a CPU with AVX2 and PCLMULQDQ. Installing with `--omit=optional` or
+The x64 binaries require a CPU with AVX2 and PCLMULQDQ. The Windows binary links the C runtime
+statically, so it needs no Visual C++ redistributable. Installing with `--omit=optional` or
 `--no-optional` skips the binary and leaves the package unable to load.
 
 ## Sign and verify
@@ -123,7 +127,10 @@ sh scripts/install-check.sh "$pack/kevaundray-lean-pq-0.0.0-dev.tgz" \
 ### One-time npm setup
 
 npm can attach a trusted publisher only to a package that already exists, so the first release
-publishes the seven packages with a short-lived token, and later releases use trusted publishing:
+publishes the eight packages with a short-lived token, and later releases use trusted publishing.
+A platform package added later, such as `@kevaundray/lean-pq-win32-x64-msvc`, goes through the
+same steps on the first release that includes it; `node-package` warns about every package not
+yet on npm.
 
 1. From the npm account that owns the `@kevaundray` scope, create a **granular access token** on
    npmjs.com (**Access Tokens → Generate New Token → Granular Access Token**) with read and write
@@ -137,8 +144,8 @@ publishes the seven packages with a short-lived token, and later releases use tr
    ```
 
 3. Cut a release. `node-publish` tries trusted publishing first, falls back to the token, and
-   publishes `@kevaundray/lean-pq` and the six platform packages with provenance.
-4. Add a trusted publisher to each of the seven packages, on npmjs.com under the package's
+   publishes `@kevaundray/lean-pq` and the seven platform packages with provenance.
+4. Add a trusted publisher to each of the eight packages, on npmjs.com under the package's
    **Settings → Trusted publishing**, or with npm 11.15 or later:
 
    ```sh

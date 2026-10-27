@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   # manylinux2014 wheels for glibc-based Linux distros (the common case)
-  # plus macOS. Linux x86_64 and aarch64 cover the realistic install base
+  # plus macOS and Windows. Linux x86_64 and aarch64 cover the realistic install base
   # for v0.0.x; add x86/armv7/s390x/ppc64le later if anyone asks.
   build:
     name: ${{ matrix.platform.runner }} / ${{ matrix.platform.target }}
@@ -38,6 +38,9 @@ jobs:
             target: aarch64
           - runner: macos-14
             target: aarch64
+          # x86_64-pc-windows-msvc; .cargo/config.toml links the C runtime statically.
+          - runner: windows-latest
+            target: x64
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -95,7 +98,7 @@ jobs:
           path: dist/*.whl
 
   # Source distribution as a fallback for platforms we don't ship wheels
-  # for (Windows, less-common archs, etc.). pip falls back to sdist when
+  # for (less-common archs, etc.). pip falls back to sdist when
   # no compatible wheel exists; users get a from-source build.
   sdist:
     name: sdist
@@ -113,9 +116,52 @@ jobs:
           name: wheels-sdist
           path: dist/*.tar.gz
 
+  # Installs the Windows wheels into a fresh virtualenv straight from the build artifact (no index,
+  # no source builds) and signs, verifies and aggregates through them before anything is published.
+  windows-wheel-test:
+    name: windows-latest / py${{ matrix.python }} wheel
+    needs: build
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every interpreter --find-interpreter builds a Windows wheel for (the runner image adds 3.15).
+        python: ["3.11", "3.12", "3.13", "3.14", "3.15"]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheels-windows-latest-x64
+          path: dist
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Check the extensions load without the Visual C++ runtime
+        run: |
+          # One matrix row per wheel, so a wheel for an interpreter missing from the matrix fails here.
+          ls dist/*.whl
+          test "$(ls dist/*.whl | wc -l)" -eq "${{ strategy.job-total }}"
+          python -m pip install pefile
+          python bindings/python/scripts/check-windows-imports.py dist/*.whl
+      - name: Install the wheel into a fresh virtualenv
+        run: |
+          venv="$(cygpath -u "$RUNNER_TEMP")/venv"
+          python -m venv "$venv"
+          "$venv/Scripts/python" -m pip install --only-binary :all: --no-index --find-links dist py-lean-pq
+          "$venv/Scripts/python" -m pip install --only-binary :all: pytest
+      - name: Sign, verify and aggregate through the installed wheel
+        working-directory: ${{ runner.temp }}
+        run: |
+          python="$(cygpath -u "$RUNNER_TEMP")/venv/Scripts/python"
+          "$python" -c "import pathlib, sys, py_lean_pq; print(py_lean_pq.__file__); assert pathlib.Path(py_lean_pq.__file__).is_relative_to(sys.prefix)"
+          "$python" -m pytest "$GITHUB_WORKSPACE/bindings/python/tests/test_lean_pq.py" -v
+
   publish:
     name: Publish to PyPI
-    needs: [build, musllinux, sdist]
+    needs: [build, musllinux, sdist, windows-wheel-test]
     runs-on: ubuntu-latest
     # PyPI Trusted Publishing. Pending publisher configured at
     # https://pypi.org/manage/account/publishing/  (account-level — used
@@ -140,7 +186,8 @@ jobs:
         with:
           packages-dir: dist
 
-  # Static native bridge per bundled Zig target; directory names match build.zig.
+  # Static native bridge per bundled Zig target; directory names match build.zig. The Go module
+  # bundles the same archives.
   zig-native:
     name: Zig native / ${{ matrix.platform.bundle_dir }}
     runs-on: ${{ matrix.platform.runner }}
@@ -160,6 +207,10 @@ jobs:
             rust_targets: x86_64-apple-darwin aarch64-apple-darwin
             target: universal2-apple-darwin
             bundle_dir: universal-macos
+          - runner: ubuntu-latest
+            rust_targets: x86_64-pc-windows-gnu
+            target: x86_64-pc-windows-gnu
+            bundle_dir: x86_64-windows-gnu
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -184,8 +235,6 @@ jobs:
     name: Zig package
     needs: zig-native
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -200,16 +249,151 @@ jobs:
           for dir in native/zig-native-*; do mv "$dir" "native/${dir#native/zig-native-}"; done
           version=${RELEASE_TAG#v}
           sh bindings/zig/scripts/package.sh "$version" native "dist/lean-pq-zig-$version.tar.gz" | tee package.log
-          for target in x86_64-linux-gnu aarch64-linux-gnu universal-macos; do
+          for target in x86_64-linux-gnu aarch64-linux-gnu universal-macos x86_64-windows-gnu; do
             grep -qx "bundled $target" package.log
           done
       - name: Build and run a consumer against the package
         run: sh bindings/zig/scripts/consumer-smoke.sh "dist/lean-pq-zig-${RELEASE_TAG#v}.tar.gz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zig-package
+          path: dist/lean-pq-zig-*.tar.gz
+          if-no-files-found: error
+
+  # A Windows consumer of the same tarball, with Zig's native target (x86_64-windows-gnu).
+  zig-windows:
+    name: Zig package / windows-latest
+    needs: zig-package
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: zig-package
+          path: dist
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - name: Show Zig's native target
+        run: zig env
+      - name: Build and run a consumer against the package
+        run: sh bindings/zig/scripts/consumer-smoke.sh "dist/lean-pq-zig-${RELEASE_TAG#v}.tar.gz"
+
+  zig-release:
+    name: Attach the Zig package
+    needs: [zig-package, zig-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: zig-package
+          path: dist
       - name: Attach to the GitHub release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" "dist/lean-pq-zig-${RELEASE_TAG#v}.tar.gz" --clobber
+        run: gh release upload "$GITHUB_REF_NAME" "dist/lean-pq-zig-${RELEASE_TAG#v}.tar.gz" --clobber -R "$GITHUB_REPOSITORY"
+
+  # The Go module `go get` fetches: a parentless commit holding bindings/go plus the zig-native
+  # archives, tagged bindings/go/vX.Y.Z, so building against it needs only Go and a C compiler.
+  go-module:
+    name: Go module
+    needs: zig-native
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: native
+          pattern: zig-native-*
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: bindings/go/go.mod
+          cache: false
+      - name: Assemble the module
+        run: |
+          for dir in native/zig-native-*; do mv "$dir" "native/${dir#native/zig-native-}"; done
+          rustup component add llvm-tools
+          llvm_bin="$(rustc --print sysroot)/lib/rustlib/x86_64-unknown-linux-gnu/bin"
+          LLVM_STRIP="$llvm_bin/llvm-strip" LLVM_AR="$llvm_bin/llvm-ar" \
+            sh bindings/go/scripts/assemble-module.sh "${RELEASE_TAG#v}" native go-module
+      - uses: actions/upload-artifact@v4
+        with:
+          name: go-module
+          path: |
+            go-module/go-module.bundle
+            go-module/proxy
+          if-no-files-found: error
+
+  # Fetches the assembled module through a file:// GOPROXY and runs the README example, on runners
+  # with the preinstalled Rust toolchain removed.
+  go-consumer:
+    name: Go consumer / ${{ matrix.runner }}
+    needs: go-module
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm, macos-14, windows-latest]
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: go-module
+          path: go-module
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: bindings/go/go.mod
+          cache: false
+      - name: Remove the preinstalled Rust toolchain
+        run: rm -rf "$HOME/.cargo" "$HOME/.rustup"
+      - name: Build and run a consumer against the module
+        run: sh bindings/go/scripts/consumer-smoke.sh go-module/proxy "${RELEASE_TAG#v}"
+
+  # Pushes only the module tag; a dry run checks the push with --dry-run.
+  go-publish:
+    name: Publish the Go module
+    needs: [go-module, go-consumer]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      MODULE: github.com/ethereum/lean-pq-bindings/bindings/go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: go-module
+          path: go-module
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: bindings/go/go.mod
+          cache: false
+      - name: Push the module tag
+        env:
+          DRY_RUN: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          tag="bindings/go/$RELEASE_TAG"
+          git fetch go-module/go-module.bundle "refs/tags/$tag:refs/tags/$tag"
+          git log -1 --format='%H %P %s' "$tag"
+          if [ "$DRY_RUN" = true ]; then
+            git push --dry-run origin "refs/tags/$tag"
+          else
+            git push origin "refs/tags/$tag"
+          fi
+      - name: Fetch the module through the public proxy
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          GOPROXY=https://proxy.golang.org go list -m "$MODULE@$RELEASE_TAG"
+          GOPROXY=https://proxy.golang.org go mod download -json "$MODULE@$RELEASE_TAG"
 
   # One Node.js addon per napi target (bindings/node/package.json `napi.targets`). The version is
   # stamped before building because the generated loader (index.js) bakes it in.
@@ -240,6 +424,11 @@ jobs:
             target: x86_64-apple-darwin
           - runner: macos-14
             target: aarch64-apple-darwin
+          # cargo-xwin links against the MSVC CRT and Windows SDK; .cargo/config.toml links the C
+          # runtime statically.
+          - runner: ubuntu-latest
+            target: x86_64-pc-windows-msvc
+            build_args: --cross-compile
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v5
@@ -249,13 +438,19 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.platform.target }}
-      - if: matrix.platform.build_args == '--cross-compile'
+      - if: endsWith(matrix.platform.target, '-musl')
         uses: mlugg/setup-zig@v2
         with:
           version: 0.15.2
       - name: Install cargo-zigbuild
-        if: matrix.platform.build_args == '--cross-compile'
+        if: endsWith(matrix.platform.target, '-musl')
         run: cargo install cargo-zigbuild --locked
+      # llvm-tools provides llvm-objdump for the import check below.
+      - name: Install cargo-xwin
+        if: endsWith(matrix.platform.target, '-msvc')
+        run: |
+          rustup component add llvm-tools
+          cargo install cargo-xwin --locked
       - name: Build
         working-directory: bindings/node
         env:
@@ -268,6 +463,20 @@ jobs:
           npm version "${RELEASE_TAG#v}" --no-git-tag-version
           npm ci
           npx napi build --platform --release --target "$TARGET" ${BUILD_ARGS:+"$BUILD_ARGS"}
+      # Static CRT check: the addon must load without the Visual C++ redistributable, so it may
+      # import system DLLs but no VCRUNTIME*.dll or MSVCP*.dll.
+      - name: Check the addon's DLL imports
+        if: endsWith(matrix.platform.target, '-msvc')
+        working-directory: bindings/node
+        run: |
+          objdump="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/^host: //p')/bin/llvm-objdump"
+          imports=$("$objdump" -p lean_pq_node.win32-x64-msvc.node | sed -n 's/^ *DLL Name: //p')
+          echo "$imports"
+          test -n "$imports"
+          if echo "$imports" | grep -i -e '^vcruntime' -e '^msvcp'; then
+            echo "lean_pq_node.win32-x64-msvc.node imports the Visual C++ runtime" >&2
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: node-binding-${{ matrix.platform.target }}
@@ -371,6 +580,8 @@ jobs:
             package: darwin-x64
           - runner: macos-14
             package: darwin-arm64
+          - runner: windows-latest
+            package: win32-x64-msvc
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -383,6 +594,7 @@ jobs:
           node-version: "22"
           package-manager-cache: false
       - name: Install and run the packages
+        shell: bash
         env:
           PACKAGE: ${{ matrix.platform.package }}
           CONTAINER: ${{ matrix.platform.container }}
@@ -452,11 +664,16 @@ jobs:
 
   # One shared library per platform bundled in the Maven jar, laid out as native/<platform>/ for
   # -PleanPqNativeDir; the Linux builds link against glibc 2.17 and build-native.sh rejects newer
-  # symbol versions. Each leg also runs a consumer against a jar bundling just its own library, so
-  # every library is loaded on its own platform before anything is published.
+  # symbol versions, and the Windows build must import only DLLs that ship with Windows. Each leg
+  # also runs a consumer against a jar bundling just its own library, so every library is loaded on
+  # its own platform before anything is published.
   java-native:
     name: Java native / ${{ matrix.platform.name }}
     runs-on: ${{ matrix.platform.runner }}
+    defaults:
+      run:
+        # Git Bash on Windows.
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
@@ -470,6 +687,9 @@ jobs:
           - name: macos-universal
             runner: macos-14
             rust_targets: x86_64-apple-darwin aarch64-apple-darwin
+          - name: windows-x86_64
+            runner: windows-latest
+            rust_targets: x86_64-pc-windows-gnu
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -492,14 +712,14 @@ jobs:
         with:
           gradle-version: "9.3.1"
       - name: Run a consumer against a jar bundling this library
-        run: sh bindings/java/scripts/consumer-smoke.sh -Pversion="${RELEASE_TAG#v}" -PleanPqNativeDir="$PWD/native"
+        run: sh bindings/java/scripts/consumer-smoke.sh -Pversion="${RELEASE_TAG#v}" -PleanPqNativeDir="$GITHUB_WORKSPACE/native"
       - uses: actions/upload-artifact@v4
         with:
           name: java-native-${{ matrix.platform.name }}
           path: native/${{ matrix.platform.name }}/
           if-no-files-found: error
 
-  # Assembles io.github.crate-crypto:lean-pq with all three libraries, runs the consumer against it
+  # Assembles io.github.crate-crypto:lean-pq with all four libraries, runs the consumer against it
   # and publishes it to Maven Central through the Central Portal. The plugin signs every file and
   # releases the deployment once the Portal validates it. See bindings/java/README.md for the secrets.
   java-publish:
@@ -527,10 +747,11 @@ jobs:
           version=${RELEASE_TAG#v}
           gradle -p bindings/java jar -Pversion="$version" -PleanPqNativeDir="$PWD/native"
           unzip -Z1 "bindings/java/build/libs/lean-pq-$version.jar" | tee jar-contents.txt
-          for library in linux-x86_64/liblean_pq_native.so linux-aarch64/liblean_pq_native.so macos-universal/liblean_pq_native.dylib; do
+          for library in linux-x86_64/liblean_pq_native.so linux-aarch64/liblean_pq_native.so macos-universal/liblean_pq_native.dylib windows-x86_64/lean_pq_native.dll; do
             grep -qx "org/ethereum/leanpq/native/$library" jar-contents.txt
           done
           file native/macos-universal/liblean_pq_native.dylib | grep -q 'Mach-O universal binary with 2 architectures'
+          file native/windows-x86_64/lean_pq_native.dll | tee /dev/stderr | grep -q 'PE32+ executable.*DLL.*x86-64'
       - name: Run a consumer against the jar
         run: sh bindings/java/scripts/consumer-smoke.sh -Pversion="${RELEASE_TAG#v}" -PleanPqNativeDir="$PWD/native"
       - name: Check Maven Central secrets

@@ -14,7 +14,11 @@ import java.lang.invoke.MethodHandle;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 
@@ -206,7 +210,8 @@ final class Native {
 
     /**
      * Loads {@code -Dlean.pq.native.path} when set; otherwise extracts the library bundled in this jar
-     * for the current platform into a private temporary directory and loads it from there.
+     * for the current platform and loads it: from a private temporary directory on Linux and macOS,
+     * from a per-user cache on Windows.
      */
     private static SymbolLookup loadLibrary() {
         String override = System.getProperty(NATIVE_PATH_PROPERTY);
@@ -214,22 +219,25 @@ final class Native {
             return SymbolLookup.libraryLookup(Path.of(override).toAbsolutePath(), LIBRARY_ARENA);
         }
         String platform = bundledPlatform();
-        String library = platform.startsWith("macos") ? "liblean_pq_native.dylib" : "liblean_pq_native.so";
+        String library = switch (platform) {
+            case "macos-universal" -> "liblean_pq_native.dylib";
+            case "windows-x86_64" -> "lean_pq_native.dll";
+            default -> "liblean_pq_native.so";
+        };
         try (InputStream bundled = Native.class.getResourceAsStream("native/" + platform + "/" + library)) {
             if (bundled == null) {
                 throw new IllegalStateException("this lean-pq jar bundles no native library for " + platform
                     + "; set -D" + NATIVE_PATH_PROPERTY + " to a lean-pq native library built for this platform");
+            }
+            if (platform.equals("windows-x86_64")) {
+                return lookupBundled(cachedLibrary(bundled.readAllBytes(), library), platform);
             }
             // createTempDirectory makes an owner-only directory on POSIX file systems.
             Path directory = Files.createTempDirectory("lean-pq-");
             Path file = directory.resolve(library);
             try {
                 Files.copy(bundled, file);
-                return SymbolLookup.libraryLookup(file, LIBRARY_ARENA);
-            } catch (IllegalArgumentException error) {
-                throw new IllegalStateException("could not load the bundled lean-pq native library for " + platform
-                    + " (Linux builds need glibc 2.17 or newer); set -D" + NATIVE_PATH_PROPERTY
-                    + " to a lean-pq native library built for this system", error);
+                return lookupBundled(file, platform);
             } finally {
                 // The loaded library stays mapped after its file is removed, so nothing is left behind.
                 Files.deleteIfExists(file);
@@ -240,22 +248,80 @@ final class Native {
         }
     }
 
+    private static SymbolLookup lookupBundled(Path file, String platform) {
+        try {
+            return SymbolLookup.libraryLookup(file, LIBRARY_ARENA);
+        } catch (IllegalArgumentException error) {
+            throw new IllegalStateException("could not load the bundled lean-pq native library for " + platform
+                + " (Linux builds need glibc 2.17 or newer); set -D" + NATIVE_PATH_PROPERTY
+                + " to a lean-pq native library built for this system", error);
+        }
+    }
+
+    /**
+     * Windows cannot delete a loaded DLL, so the library is installed once per distinct build as
+     * {@code %LOCALAPPDATA%\lean-pq\native\<SHA-256 of the library>\<library>} and reused by every
+     * later JVM. An existing copy is used only if its bytes equal the bundled library; otherwise a
+     * fresh copy is written beside it and moved into place atomically.
+     */
+    private static Path cachedLibrary(byte[] bytes, String library) throws IOException {
+        String digest;
+        try {
+            digest = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (NoSuchAlgorithmException error) {
+            throw new IllegalStateException("SHA-256 is unavailable", error);
+        }
+        String localAppData = System.getenv("LOCALAPPDATA");
+        Path root = localAppData != null && !localAppData.isBlank()
+            ? Path.of(localAppData)
+            : Path.of(System.getProperty("user.home"), "AppData", "Local");
+        Path directory = root.resolve("lean-pq").resolve("native").resolve(digest);
+        Path file = directory.resolve(library);
+        if (hasContent(file, bytes)) {
+            return file;
+        }
+        Files.createDirectories(directory);
+        Path partial = Files.createTempFile(directory, library, ".partial");
+        try {
+            Files.write(partial, bytes);
+            try {
+                Files.move(partial, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException error) {
+                // Another JVM may have installed the same library meanwhile and now holds it loaded.
+                if (!hasContent(file, bytes)) {
+                    throw error;
+                }
+            }
+        } finally {
+            Files.deleteIfExists(partial);
+        }
+        return file;
+    }
+
+    private static boolean hasContent(Path file, byte[] bytes) throws IOException {
+        return Files.isRegularFile(file) && Files.size(file) == bytes.length && Arrays.equals(Files.readAllBytes(file), bytes);
+    }
+
     /** Names the jar's native resource directory for this JVM's platform. */
     private static String bundledPlatform() {
         String os = System.getProperty("os.name", "");
         String arch = System.getProperty("os.arch", "");
+        boolean x86_64 = arch.equals("amd64") || arch.equals("x86_64");
         if (os.startsWith("Mac OS X")) {
             // One universal library carries both the x86_64 and arm64 slices.
             return "macos-universal";
         }
-        if (os.equals("Linux") && (arch.equals("amd64") || arch.equals("x86_64"))) {
+        if (os.equals("Linux") && x86_64) {
             return "linux-x86_64";
         }
         if (os.equals("Linux") && arch.equals("aarch64")) {
             return "linux-aarch64";
         }
-        throw new IllegalStateException("lean-pq bundles native libraries for Linux x86_64 and aarch64 (glibc) and macOS"
-            + " (x86_64 and arm64), not " + os + " " + arch + "; set -D" + NATIVE_PATH_PROPERTY
+        if (os.startsWith("Windows") && x86_64) {
+            return "windows-x86_64";
+        }
+        throw new IllegalStateException("lean-pq bundles native libraries for Linux x86_64 and aarch64 (glibc), macOS"
+            + " (x86_64 and arm64) and Windows x86_64, not " + os + " " + arch + "; set -D" + NATIVE_PATH_PROPERTY
             + " to a lean-pq native library built for this platform");
     }
 

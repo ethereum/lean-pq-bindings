@@ -14,10 +14,12 @@ aggregates recursively. The proving parameters stay inside this crate.
 
 ## Install
 
+<!-- x-release-please-start-version -->
 ```toml
 [dependencies]
-lean-pq = { git = "https://github.com/ethereum/lean-pq-bindings.git" }
+lean-pq = { git = "https://github.com/ethereum/lean-pq-bindings.git", tag = "v0.6.2" }
 ```
+<!-- x-release-please-end -->
 
 The crate is not published to crates.io: it depends on leanVM by git revision.
 

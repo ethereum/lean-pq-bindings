@@ -24,21 +24,25 @@ repository's release tag (`vX.Y.Z` is `X.Y.Z`). It needs JDK 25.
 
 Gradle (Kotlin DSL):
 
+<!-- x-release-please-start-version -->
 ```kotlin
 dependencies {
-    implementation("io.github.crate-crypto:lean-pq:X.Y.Z")
+    implementation("io.github.crate-crypto:lean-pq:0.6.2")
 }
 ```
+<!-- x-release-please-end -->
 
 Maven:
 
+<!-- x-release-please-start-version -->
 ```xml
 <dependency>
   <groupId>io.github.crate-crypto</groupId>
   <artifactId>lean-pq</artifactId>
-  <version>X.Y.Z</version>
+  <version>0.6.2</version>
 </dependency>
 ```
+<!-- x-release-please-end -->
 
 ## Native-access permission
 
@@ -62,13 +66,20 @@ The jar bundles the native library for:
 | Linux x86_64, glibc 2.17 or newer (CPU with AVX2 and PCLMULQDQ) | `org/ethereum/leanpq/native/linux-x86_64/liblean_pq_native.so` |
 | Linux aarch64, glibc 2.17 or newer | `org/ethereum/leanpq/native/linux-aarch64/liblean_pq_native.so` |
 | macOS arm64 and x86_64 (one universal library; x86_64 needs AVX2 and PCLMULQDQ) | `org/ethereum/leanpq/native/macos-universal/liblean_pq_native.dylib` |
+| Windows x86_64 (Windows 10 or newer; CPU with AVX2 and PCLMULQDQ) | `org/ethereum/leanpq/native/windows-x86_64/lean_pq_native.dll` |
 
-On first use the library is copied into a new owner-only directory under `java.io.tmpdir`,
-loaded, and the copy deleted; that directory must allow executable mappings. Other platforms,
-including musl-based Linux and Windows, fail with an error naming the platform.
+On Linux and macOS, first use copies the library into a new owner-only directory under
+`java.io.tmpdir`, loads it, and deletes the copy; that directory must allow executable mappings.
+Windows cannot delete a loaded DLL, so there the library is installed once per build as
+`%LOCALAPPDATA%\lean-pq\native\<SHA-256 of the DLL>\lean_pq_native.dll` and reused by later JVMs
+only while its bytes match the jar's copy; a missing or different file is rewritten atomically.
+Each release adds one directory there, which can be deleted while no JVM uses it. The DLL is built
+for `x86_64-pc-windows-gnu` and imports only DLLs that ship with Windows, so it needs no Visual C++
+or MinGW runtime. Other platforms, including musl-based Linux and Windows on arm64, fail with an
+error naming the platform.
 
 To load a different build instead, set `-Dlean.pq.native.path=/path/to/liblean_pq_native.so`
-(or `.dylib`) before first use; the bundled libraries are then ignored. Build one with
+(or `.dylib`, or `lean_pq_native.dll`) before first use; the bundled libraries are then ignored. Build one with
 `cargo build --release -p lean-pq-native` from the repository root.
 
 ## Build and test
@@ -87,18 +98,21 @@ takes seconds and roughly 1.6 GB of memory.
 libraries instead, pass `-PleanPqNativeDir=DIR`, where `DIR/<platform>/` holds the library for each
 platform in the table above; `scripts/build-native.sh <platform> DIR` builds one (the Linux builds
 need [Zig 0.15.2](https://ziglang.org/download/) and `cargo install cargo-zigbuild`, the macOS
-build needs a Mac). Local builds have version `0.0.0-SNAPSHOT`; `-Pversion=X.Y.Z` overrides it.
+build needs a Mac, and the Windows build needs Windows with Git Bash, the `x86_64-pc-windows-gnu`
+Rust target and MinGW-w64's `gcc` and `objdump` on `PATH`). Local builds have version `0.0.0-SNAPSHOT`; `-Pversion=X.Y.Z` overrides it.
 
 `scripts/consumer-smoke.sh [GRADLE_ARGS...]` publishes the artifact to a throwaway Maven
 repository, builds a fresh modular project depending on `io.github.crate-crypto:lean-pq` from it,
 and runs that project with `--enable-native-access=org.ethereum.leanpq` and no
-`lean.pq.native.path`, signing, verifying and aggregating with both schemes. CI runs it on
-Linux x86_64; set `GRADLE` if Gradle is not on `PATH`.
+`lean.pq.native.path`, signing, verifying and aggregating with both schemes; on Windows (under
+Git Bash) it runs the consumer twice and checks that both runs use the single cached DLL. CI runs it
+on Linux x86_64 and the release workflow on every bundled platform; set `GRADLE` if Gradle is not on
+`PATH`.
 
 ## Releasing
 
 `.github/workflows/release.yml` publishes on every `vX.Y.Z` tag: `java-native` builds and checks
-each platform's library, and `java-publish` bundles all three in the jar, runs the consumer smoke
+each platform's library, and `java-publish` bundles all four in the jar, runs the consumer smoke
 against it, then signs and uploads it to the Central Portal, releasing it once the Portal validates
 the deployment. A version can be published only once.
 
