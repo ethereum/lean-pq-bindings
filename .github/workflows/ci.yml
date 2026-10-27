@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, java-windows]
   pull_request:
 
 jobs:
