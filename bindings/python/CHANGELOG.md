@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/ethereum/lean-pq-bindings/compare/v0.6.1...v0.6.2) (2026-10-27)
+
+
+### Documentation
+
+* **python:** point to the Node.js, Java, and Zig packages ([b33080e](https://github.com/ethereum/lean-pq-bindings/commit/b33080ea8477e03a77ca764e778a13c908f9e15c))
+
 ## [0.6.1](https://github.com/ethereum/lean-pq-bindings/compare/v0.6.0...v0.6.1) (2026-10-26)
 
 
