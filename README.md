@@ -5,86 +5,146 @@ stateful **leanXMSS**, stateless **leanSPHINCS**, and zkVM-backed recursive aggr
 one proof. Every binding wraps the safe Rust facade in [`bindings/rust`](bindings/rust/README.md),
 which pins leanVM by git revision and keeps the proving parameters internal.
 
-## Bindings
+## Install
 
-- [`bindings/python`](bindings/python/README.md) — the `py-lean-pq` package for Python.
-- [`bindings/rust`](bindings/rust/README.md) — the `lean-pq` crate for Rust.
-- [`bindings/java`](bindings/java/README.md) — Java 25 bindings for JVM applications such as Teku.
-- [`bindings/go`](bindings/go/README.md) — Go bindings linked through cgo.
-- [`bindings/node`](bindings/node/README.md) — Node.js bindings built with napi-rs.
-- [`bindings/zig`](bindings/zig/README.md) — Zig bindings linked to the shared native archive.
+Every package is released together from one version: each `vX.Y.Z` release publishes all of them
+at `X.Y.Z`. Prebuilt packages need no Rust toolchain.
 
-## Install and integrate
+| Language | Package | Prebuilt for |
+| --- | --- | --- |
+| [Python](bindings/python/README.md) ≥ 3.11 | `py-lean-pq` on PyPI | Linux x86_64/aarch64 (glibc, musl), macOS arm64, Windows x86_64 |
+| [Node.js](bindings/node/README.md) ≥ 18.17 | `@kevaundray/lean-pq` on npm | Linux x64/arm64 (glibc, musl), macOS x64/arm64, Windows x64 |
+| [Java](bindings/java/README.md) 25 | `io.github.crate-crypto:lean-pq` on Maven Central | Linux x86_64/aarch64 (glibc 2.17+), macOS x86_64/arm64, Windows x86_64 |
+| [Go](bindings/go/README.md) ≥ 1.24 | `github.com/ethereum/lean-pq-bindings/bindings/go` | Linux amd64/arm64 (glibc), macOS amd64/arm64, Windows amd64 |
+| [Zig](bindings/zig/README.md) ≥ 0.16 | package attached to each GitHub release | Linux x86_64/aarch64 (glibc), macOS x86_64/aarch64, Windows x86_64 |
+| [Rust](bindings/rust/README.md) | `lean-pq` from this repository (git) | built from source |
 
-The release workflow publishes the Python package to PyPI:
+The x86_64 builds require a CPU with AVX2 and PCLMULQDQ.
 
+### Python
+
+<!-- x-release-please-start-version -->
 ```sh
-python -m pip install py-lean-pq
+pip install py-lean-pq==0.6.2
+```
+<!-- x-release-please-end -->
+
+### Node.js
+
+<!-- x-release-please-start-version -->
+```sh
+npm install @kevaundray/lean-pq@0.6.2
+```
+<!-- x-release-please-end -->
+
+npm installs the binary for your platform through an optional dependency; installing with
+`--omit=optional` leaves the package unable to load.
+
+### Java
+
+Gradle (Kotlin DSL):
+
+<!-- x-release-please-start-version -->
+```kotlin
+implementation("io.github.crate-crypto:lean-pq:0.6.2")
+```
+<!-- x-release-please-end -->
+
+Maven:
+
+<!-- x-release-please-start-version -->
+```xml
+<dependency>
+  <groupId>io.github.crate-crypto</groupId>
+  <artifactId>lean-pq</artifactId>
+  <version>0.6.2</version>
+</dependency>
+```
+<!-- x-release-please-end -->
+
+The jar bundles the native library for each platform. Run with
+`--enable-native-access=org.ethereum.leanpq`.
+
+### Go
+
+<!-- x-release-please-start-version -->
+```sh
+go get github.com/ethereum/lean-pq-bindings/bindings/go@v0.6.2
+```
+<!-- x-release-please-end -->
+
+The module links a bundled static library through cgo, so it needs `CGO_ENABLED=1` and a C
+compiler: gcc or clang on Linux, the Xcode command line tools on macOS, and MinGW-w64 gcc on
+Windows.
+
+### Zig
+
+<!-- x-release-please-start-version -->
+```sh
+version=0.6.2
+zig fetch --save=lean_pq "https://github.com/ethereum/lean-pq-bindings/releases/download/v$version/lean-pq-zig-$version.tar.gz"
+```
+<!-- x-release-please-end -->
+
+Then add the module in `build.zig`:
+
+```zig
+const lean_pq = b.dependency("lean_pq", .{ .target = target, .optimize = optimize });
+exe.root_module.addImport("lean_pq", lean_pq.module("lean_pq"));
 ```
 
-The release workflow also publishes the Node.js package to npm, with prebuilt binaries for Linux
-x64/arm64 (glibc and musl) and macOS x64/arm64:
+On Windows the bundled archive targets Zig's default `x86_64-windows-gnu` ABI.
 
-```sh
-npm install @kevaundray/lean-pq
-```
+### Rust
 
-Rust applications can consume the safe facade directly from this repository:
+The crate is not on crates.io because it depends on leanVM by git revision:
 
+<!-- x-release-please-start-version -->
 ```toml
 [dependencies]
-lean-pq = { git = "https://github.com/ethereum/lean-pq-bindings.git" }
+lean-pq = { git = "https://github.com/ethereum/lean-pq-bindings.git", tag = "v0.6.2" }
 ```
+<!-- x-release-please-end -->
 
-Zig projects fetch the package attached to each GitHub release, with native archives bundled for
-Linux x86_64/aarch64 (glibc) and macOS:
+## Build from source
 
-```sh
-zig fetch --save=lean_pq https://github.com/ethereum/lean-pq-bindings/releases/download/v<version>/lean-pq-zig-<version>.tar.gz
-```
+Clone the repository and follow each binding's README; every binding builds against the
+repository's pinned leanVM revision. Building needs Rust, plus the language toolchain:
 
-Java 25 applications depend on `io.github.crate-crypto:lean-pq` from Maven Central. The jar bundles
-native libraries for Linux x86_64/aarch64 (glibc 2.17+) and macOS; run with
-`--enable-native-access=org.ethereum.leanpq`:
-
-```kotlin
-implementation("io.github.crate-crypto:lean-pq:<version>")
-```
-
-Go is a source integration today. Clone the repository, then follow the binding-specific
-instructions below; the bindings build against the repository's pinned leanVM API rather than
-requiring applications to choose its Rust dependencies themselves.
-
-```sh
-git clone https://github.com/ethereum/lean-pq-bindings.git
-cd lean-pq-bindings
-```
-
-| Binding | Upstream integration | Prerequisites |
+| Binding | Local build and test | Prerequisites |
 | --- | --- | --- |
-| [Java 25](bindings/java/README.md) | Depend on `io.github.crate-crypto:lean-pq` (see above), or run `gradle -p bindings/java test` for a local build. | JDK 25; Gradle 9.1+ and Rust for source builds |
-| [Node.js](bindings/node/README.md) | Run `npm install @kevaundray/lean-pq`, or `npm ci && npm run build` in `bindings/node` for a local build. | Node.js 18.17+; Rust for source builds |
-| [Go](bindings/go/README.md) | Stage the target-specific Rust archive, then use the local Go module. | Go 1.24+, cgo, Zig, `cargo-zigbuild` |
-| [Zig](bindings/zig/README.md) | Use the release package above, or stage the target-specific Rust archive and invoke `zig build … -Dnative-dir=…`. | Zig 0.16+; `cargo-zigbuild` for source builds |
+| [Python](bindings/python/README.md) | `uv run --extra dev maturin develop --release`, then `uv run --extra dev pytest tests/` in `bindings/python` | Rust, uv |
+| [Node.js](bindings/node/README.md) | `npm ci && npm run build && npm test` in `bindings/node` | Rust, Node.js 18.17+ |
+| [Java](bindings/java/README.md) | `gradle -p bindings/java test` | Rust, JDK 25, Gradle 9.1+ |
+| [Go](bindings/go/README.md) | stage the static archive (below), then `go test ./...` in `bindings/go` | Rust, Go 1.24+, cgo, Zig, `cargo-zigbuild` |
+| [Zig](bindings/zig/README.md) | stage the static archive (below), then `zig build test -Dnative-dir=…` in `bindings/zig` | Rust, Zig 0.16+, `cargo-zigbuild` |
+| [Rust](bindings/rust/README.md) | `cargo test --release -p lean-pq` | Rust |
 
-Go and Zig source builds need a static archive matching the application target. For a Linux x86_64 source build:
+Go and Zig link a static archive for the build target. For Linux x86_64:
 
 ```sh
 rustup target add x86_64-unknown-linux-gnu
 cargo install cargo-zigbuild --locked
-sh bindings/native/scripts/stage-static.sh x86_64-unknown-linux-gnu /tmp/lean-pq-native
+sh bindings/native/scripts/stage-static.sh x86_64-unknown-linux-gnu bindings/go/internal/native/linux_amd64
 ```
 
-Pass that directory as `-Dnative-dir=/tmp/lean-pq-native` for Zig. Go stages the same archive
-under its package's `internal/native/linux_amd64` directory; its README gives the exact platform
-layouts. Release packaging for Go archives is not available yet.
+Zig takes the same archive's directory as `-Dnative-dir`; the Go README lists the directory for
+each platform.
 
 Each binding uses a language-native wrapper around the Rust implementation. The internal
 [`bindings/native`](bindings/native/README.md) crate supplies a private C-shaped Rust ABI for
-managed wrappers: Java consumes it through the finalized Foreign Function & Memory API, while Go
-and Zig link its static archive. It is not a separate, supported C binding; future bindings can use
-whichever wrapper best fits their language ecosystem.
+managed wrappers: Java consumes it through the Foreign Function & Memory API, while Go and Zig
+link its static archive. It is not a separate, supported C binding.
+
+## Releases
+
+[release-please](https://github.com/googleapis/release-please) keeps a release pull request open
+from the conventional commits on `main`. Merging it bumps the version everywhere it appears,
+including the install instructions above, and tags `vX.Y.Z`. That tag runs
+`.github/workflows/release.yml`, which builds and tests every package on each platform before
+publishing it. See [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
-MIT OR Apache-2.0
+Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT)
+at your option.

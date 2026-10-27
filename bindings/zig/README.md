@@ -23,9 +23,12 @@ API.
 Each GitHub release attaches `lean-pq-zig-<version>.tar.gz`, a Zig package with the native
 archives bundled. Zig 0.16 or newer:
 
+<!-- x-release-please-start-version -->
 ```sh
-zig fetch --save=lean_pq https://github.com/ethereum/lean-pq-bindings/releases/download/v<version>/lean-pq-zig-<version>.tar.gz
+version=0.6.2
+zig fetch --save=lean_pq "https://github.com/ethereum/lean-pq-bindings/releases/download/v$version/lean-pq-zig-$version.tar.gz"
 ```
+<!-- x-release-please-end -->
 
 Then import the module in `build.zig`:
 

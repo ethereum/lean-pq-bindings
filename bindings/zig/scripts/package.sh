@@ -30,12 +30,13 @@ root="$stage/lean-pq-zig-$version"
 mkdir -p "$root/native"
 
 cp "$package_dir/build.zig" "$package_dir/README.md" "$root/"
+cp "$package_dir/../../LICENSE-MIT" "$package_dir/../../LICENSE-APACHE" "$root/"
 cp -R "$package_dir/include" "$package_dir/src" "$root/"
 sed -e "s/^    \.version = \"[^\"]*\",$/    .version = \"$version\",/" \
-    -e 's/^    \.paths = \.{ \(.*\) },$/    .paths = .{ \1, "native" },/' \
+    -e 's/^    \.paths = \.{ \(.*\) },$/    .paths = .{ \1, "native", "LICENSE-MIT", "LICENSE-APACHE" },/' \
     "$package_dir/build.zig.zon" > "$root/build.zig.zon"
 grep -q "^    \.version = \"$version\",$" "$root/build.zig.zon"
-grep -q '"native" },$' "$root/build.zig.zon"
+grep -q '"native", "LICENSE-MIT", "LICENSE-APACHE" },$' "$root/build.zig.zon"
 
 bundled=0
 for target in x86_64-linux-gnu aarch64-linux-gnu universal-macos x86_64-windows-gnu; do

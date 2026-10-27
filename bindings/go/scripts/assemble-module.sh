@@ -73,6 +73,8 @@ strip_archive() {
 
 git -c init.defaultBranch=module init -q "$tree"
 git -C "$repo_dir" archive HEAD bindings/go | tar -x -C "$tree"
+# The licenses live at the repository root; the module needs its own copy (pkg.go.dev requires one).
+cp "$repo_dir/LICENSE-MIT" "$repo_dir/LICENSE-APACHE" "$tree/bindings/go/"
 for pair in x86_64-linux-gnu:linux_amd64 aarch64-linux-gnu:linux_arm64 \
     universal-macos:darwin_universal x86_64-windows-gnu:windows_amd64; do
     source="$native_root/${pair%%:*}/liblean_pq_native.a"

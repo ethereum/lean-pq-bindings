@@ -15,9 +15,11 @@ decoding return Promises so their native work does not block the JavaScript even
 
 ## Install
 
+<!-- x-release-please-start-version -->
 ```sh
-npm install @kevaundray/lean-pq
+npm install @kevaundray/lean-pq@0.6.2
 ```
+<!-- x-release-please-end -->
 
 npm installs a prebuilt binary through a per-platform optional dependency, so installing needs
 no Rust toolchain. Prebuilt binaries cover Node.js 18.17 or later on:

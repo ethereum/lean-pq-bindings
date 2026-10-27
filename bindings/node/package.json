@@ -2,7 +2,7 @@
   "name": "@kevaundray/lean-pq",
   "version": "0.0.0-dev",
   "description": "Node.js bindings for leanXMSS and leanSPHINCS post-quantum signatures and their leanVM aggregation",
-  "license": "MIT",
+  "license": "MIT OR Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ethereum/lean-pq-bindings.git",

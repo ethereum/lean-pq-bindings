@@ -19,7 +19,7 @@
     "napi-rs"
   ],
   "homepage": "https://github.com/ethereum/lean-pq-bindings/tree/main/bindings/node#readme",
-  "license": "MIT",
+  "license": "MIT OR Apache-2.0",
   "engines": {
     "node": ">=18.17.0"
   },

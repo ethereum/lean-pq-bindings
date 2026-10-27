@@ -24,21 +24,25 @@ repository's release tag (`vX.Y.Z` is `X.Y.Z`). It needs JDK 25.
 
 Gradle (Kotlin DSL):
 
+<!-- x-release-please-start-version -->
 ```kotlin
 dependencies {
-    implementation("io.github.crate-crypto:lean-pq:X.Y.Z")
+    implementation("io.github.crate-crypto:lean-pq:0.6.2")
 }
 ```
+<!-- x-release-please-end -->
 
 Maven:
 
+<!-- x-release-please-start-version -->
 ```xml
 <dependency>
   <groupId>io.github.crate-crypto</groupId>
   <artifactId>lean-pq</artifactId>
-  <version>X.Y.Z</version>
+  <version>0.6.2</version>
 </dependency>
 ```
+<!-- x-release-please-end -->
 
 ## Native-access permission
 

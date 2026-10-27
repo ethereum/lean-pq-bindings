@@ -21,14 +21,16 @@ a CPU with AVX2 and PCLMULQDQ.
 
 ## Install
 
+<!-- x-release-please-start-version -->
 ```bash
-pip install py-lean-pq
+pip install py-lean-pq==0.6.2
 ```
+<!-- x-release-please-end -->
 
 The same library is published for Node.js (`@kevaundray/lean-pq` on npm), Java
-(`io.github.crate-crypto:lean-pq` on Maven Central), and Zig (a `zig fetch`
-package on each GitHub release); see the
-[repository README](https://github.com/ethereum/lean-pq-bindings#install-and-integrate).
+(`io.github.crate-crypto:lean-pq` on Maven Central), Go (`go get`), and Zig (a
+`zig fetch` package on each GitHub release); see the
+[repository README](https://github.com/ethereum/lean-pq-bindings#install).
 
 ## leanXMSS
 
