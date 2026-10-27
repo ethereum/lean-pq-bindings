@@ -1,6 +1,6 @@
 [package]
 name = "py-lean-pq"
-version = "0.6.2"
+version.workspace = true
 edition = "2021"
 resolver = "2"
 
