@@ -23,6 +23,11 @@ musl) and macOS arm64.
 pip install py-lean-pq
 ```
 
+The same library is published for Node.js (`@kevaundray/lean-pq` on npm), Java
+(`io.github.crate-crypto:lean-pq` on Maven Central), and Zig (a `zig fetch`
+package on each GitHub release); see the
+[repository README](https://github.com/ethereum/lean-pq-bindings#install-and-integrate).
+
 ## leanXMSS
 
 ```python
