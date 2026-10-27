@@ -225,7 +225,17 @@ jobs:
             target: universal2-apple-darwin
             archive_dir: bindings/go/internal/native/darwin_universal
             go_test_command: go test ./...
+          # cgo links with the runner's MinGW-w64 gcc.
+          - name: Windows amd64
+            runner: windows-latest
+            rust_targets: x86_64-pc-windows-gnu
+            target: x86_64-pc-windows-gnu
+            archive_dir: bindings/go/internal/native/windows_amd64
+            go_test_command: go test ./...
     runs-on: ${{ matrix.platform.runner }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 

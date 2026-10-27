@@ -2,7 +2,8 @@
 # Assemble the Zig package tarball that consumers add with `zig fetch --save URL`.
 #
 # NATIVE_ROOT holds one directory per bundled target, each with liblean_pq_native.a:
-# x86_64-linux-gnu, aarch64-linux-gnu, universal-macos (the names build.zig selects from).
+# x86_64-linux-gnu, aarch64-linux-gnu, universal-macos, x86_64-windows-gnu (the names build.zig
+# selects from).
 set -eu
 
 if [ "$#" -ne 3 ]; then
@@ -37,7 +38,7 @@ grep -q "^    \.version = \"$version\",$" "$root/build.zig.zon"
 grep -q '"native" },$' "$root/build.zig.zon"
 
 bundled=0
-for target in x86_64-linux-gnu aarch64-linux-gnu universal-macos; do
+for target in x86_64-linux-gnu aarch64-linux-gnu universal-macos x86_64-windows-gnu; do
     if [ -f "$native_root/$target/liblean_pq_native.a" ]; then
         mkdir -p "$root/native/$target"
         install -m 0644 "$native_root/$target/liblean_pq_native.a" "$root/native/$target/liblean_pq_native.a"
