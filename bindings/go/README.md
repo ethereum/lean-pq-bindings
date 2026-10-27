@@ -5,22 +5,40 @@ Go bindings for leanXMSS and leanSPHINCS signatures and their recursive aggregat
 the final program through cgo. The Go API uses normal Go values and `Close` methods; it does not
 expose C pointers or the internal bridge ABI.
 
-## Requirements
+## Install
 
-- Go 1.24 or newer with cgo enabled
-- A C linker for the target platform
-- [Zig](https://ziglang.org/) and [`cargo-zigbuild`](https://github.com/rust-cross/cargo-zigbuild)
-  when producing a native archive from source
+Each release tags `bindings/go/v<version>`: a commit holding only this module with the native
+archives built in, so `go get` needs no Rust toolchain:
 
-The Go package expects a target-matched `liblean_pq_native.a` in its internal native-asset
-directory. Go build tags select that archive and link it into the final Go binary. The release
-distribution mechanism for those archives is intentionally separate from the build layout described
-here.
+```sh
+go get github.com/ethereum/lean-pq-bindings/bindings/go@v<version>
+```
+
+Requirements:
+
+- Go 1.24 or newer with cgo enabled (`CGO_ENABLED=1`)
+- A C compiler for the target platform: gcc or clang on Linux, the Xcode command line tools on
+  macOS, and [MinGW-w64](https://www.mingw-w64.org/) gcc on PATH on Windows (cgo does not use
+  MSVC)
+
+Supported platforms:
+
+| `GOOS`/`GOARCH` | Bundled archive |
+| --- | --- |
+| `linux/amd64` | `internal/native/linux_amd64` (glibc) |
+| `linux/arm64` | `internal/native/linux_arm64` (glibc) |
+| `darwin/amd64`, `darwin/arm64` | `internal/native/darwin_universal` |
+| `windows/amd64` | `internal/native/windows_amd64` (MinGW-w64) |
+
+Build tags select the archive and cgo links it into the final Go binary, so the program has no
+runtime dependency on the bridge. The tagged commit is not on any branch: `main` holds no
+archives, and building from a checkout of this repository needs the source build below.
 
 ## Source build and test
 
-From the repository root, install the cross-build toolchain and stage the local Linux amd64 archive
-in the layout used by the Go package:
+From the repository root, install [Zig](https://ziglang.org/) 0.15.2 and
+[`cargo-zigbuild`](https://github.com/rust-cross/cargo-zigbuild), then stage the local Linux amd64
+archive in the layout used by the Go package:
 
 ```sh
 rustup target add x86_64-unknown-linux-gnu
@@ -32,16 +50,20 @@ go test ./...
 
 The aggregation test proves recursively: expect seconds per proof and about 1.6 GB of memory.
 
-The release build stages these target/archive pairs:
+Each platform stages its archive from one Rust target:
 
 | Rust target | Go native-asset directory |
 | --- | --- |
 | `x86_64-unknown-linux-gnu` | `linux_amd64` |
 | `aarch64-unknown-linux-gnu` | `linux_arm64` |
 | `universal2-apple-darwin` | `darwin_universal` |
+| `x86_64-pc-windows-gnu` | `windows_amd64` |
 
 The universal macOS build requires both `x86_64-apple-darwin` and
 `aarch64-apple-darwin` Rust targets and runs on macOS so `cargo-zigbuild` can use the installed SDK.
+
+`scripts/assemble-module.sh` builds the tagged module from the release archives, and
+`scripts/consumer-smoke.sh` proves it works through `go get` without Rust.
 
 ## Example
 

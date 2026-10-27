@@ -186,7 +186,8 @@ jobs:
         with:
           packages-dir: dist
 
-  # Static native bridge per bundled Zig target; directory names match build.zig.
+  # Static native bridge per bundled Zig target; directory names match build.zig. The Go module
+  # bundles the same archives.
   zig-native:
     name: Zig native / ${{ matrix.platform.bundle_dir }}
     runs-on: ${{ matrix.platform.runner }}
@@ -206,6 +207,10 @@ jobs:
             rust_targets: x86_64-apple-darwin aarch64-apple-darwin
             target: universal2-apple-darwin
             bundle_dir: universal-macos
+          - runner: ubuntu-latest
+            rust_targets: x86_64-pc-windows-gnu
+            target: x86_64-pc-windows-gnu
+            bundle_dir: x86_64-windows-gnu
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -230,8 +235,6 @@ jobs:
     name: Zig package
     needs: zig-native
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -246,16 +249,151 @@ jobs:
           for dir in native/zig-native-*; do mv "$dir" "native/${dir#native/zig-native-}"; done
           version=${RELEASE_TAG#v}
           sh bindings/zig/scripts/package.sh "$version" native "dist/lean-pq-zig-$version.tar.gz" | tee package.log
-          for target in x86_64-linux-gnu aarch64-linux-gnu universal-macos; do
+          for target in x86_64-linux-gnu aarch64-linux-gnu universal-macos x86_64-windows-gnu; do
             grep -qx "bundled $target" package.log
           done
       - name: Build and run a consumer against the package
         run: sh bindings/zig/scripts/consumer-smoke.sh "dist/lean-pq-zig-${RELEASE_TAG#v}.tar.gz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zig-package
+          path: dist/lean-pq-zig-*.tar.gz
+          if-no-files-found: error
+
+  # A Windows consumer of the same tarball, with Zig's native target (x86_64-windows-gnu).
+  zig-windows:
+    name: Zig package / windows-latest
+    needs: zig-package
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: zig-package
+          path: dist
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - name: Show Zig's native target
+        run: zig env
+      - name: Build and run a consumer against the package
+        run: sh bindings/zig/scripts/consumer-smoke.sh "dist/lean-pq-zig-${RELEASE_TAG#v}.tar.gz"
+
+  zig-release:
+    name: Attach the Zig package
+    needs: [zig-package, zig-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: zig-package
+          path: dist
       - name: Attach to the GitHub release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" "dist/lean-pq-zig-${RELEASE_TAG#v}.tar.gz" --clobber
+        run: gh release upload "$GITHUB_REF_NAME" "dist/lean-pq-zig-${RELEASE_TAG#v}.tar.gz" --clobber -R "$GITHUB_REPOSITORY"
+
+  # The Go module `go get` fetches: a parentless commit holding bindings/go plus the zig-native
+  # archives, tagged bindings/go/vX.Y.Z, so building against it needs only Go and a C compiler.
+  go-module:
+    name: Go module
+    needs: zig-native
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: native
+          pattern: zig-native-*
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: bindings/go/go.mod
+          cache: false
+      - name: Assemble the module
+        run: |
+          for dir in native/zig-native-*; do mv "$dir" "native/${dir#native/zig-native-}"; done
+          rustup component add llvm-tools
+          llvm_bin="$(rustc --print sysroot)/lib/rustlib/x86_64-unknown-linux-gnu/bin"
+          LLVM_STRIP="$llvm_bin/llvm-strip" LLVM_AR="$llvm_bin/llvm-ar" \
+            sh bindings/go/scripts/assemble-module.sh "${RELEASE_TAG#v}" native go-module
+      - uses: actions/upload-artifact@v4
+        with:
+          name: go-module
+          path: |
+            go-module/go-module.bundle
+            go-module/proxy
+          if-no-files-found: error
+
+  # Fetches the assembled module through a file:// GOPROXY and runs the README example, on runners
+  # with the preinstalled Rust toolchain removed.
+  go-consumer:
+    name: Go consumer / ${{ matrix.runner }}
+    needs: go-module
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm, macos-14, windows-latest]
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: go-module
+          path: go-module
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: bindings/go/go.mod
+          cache: false
+      - name: Remove the preinstalled Rust toolchain
+        run: rm -rf "$HOME/.cargo" "$HOME/.rustup"
+      - name: Build and run a consumer against the module
+        run: sh bindings/go/scripts/consumer-smoke.sh go-module/proxy "${RELEASE_TAG#v}"
+
+  # Pushes only the module tag; a dry run checks the push with --dry-run.
+  go-publish:
+    name: Publish the Go module
+    needs: [go-module, go-consumer]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      MODULE: github.com/ethereum/lean-pq-bindings/bindings/go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: go-module
+          path: go-module
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: bindings/go/go.mod
+          cache: false
+      - name: Push the module tag
+        env:
+          DRY_RUN: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          tag="bindings/go/$RELEASE_TAG"
+          git fetch go-module/go-module.bundle "refs/tags/$tag:refs/tags/$tag"
+          git log -1 --format='%H %P %s' "$tag"
+          if [ "$DRY_RUN" = true ]; then
+            git push --dry-run origin "refs/tags/$tag"
+          else
+            git push origin "refs/tags/$tag"
+          fi
+      - name: Fetch the module through the public proxy
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          GOPROXY=https://proxy.golang.org go list -m "$MODULE@$RELEASE_TAG"
+          GOPROXY=https://proxy.golang.org go mod download -json "$MODULE@$RELEASE_TAG"
 
   # One Node.js addon per napi target (bindings/node/package.json `napi.targets`). The version is
   # stamped before building because the generated loader (index.js) bakes it in.

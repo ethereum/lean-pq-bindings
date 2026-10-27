@@ -48,3 +48,4 @@ stage() {
 stage x86_64-unknown-linux-gnu
 stage aarch64-unknown-linux-gnu
 stage universal2-apple-darwin
+stage x86_64-pc-windows-gnu
