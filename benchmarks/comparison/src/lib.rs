@@ -1108,12 +1108,9 @@ impl FixtureSet {
         );
 
         for index in 0..expected_len {
-            lean_pq::xmss::verify(
-                &self.lean_public_keys[index],
-                &self.lean_messages[index],
-                &self.lean_signatures[index],
-            )
-            .with_context(|| format!("XMSS signature failed validation for signer {index}"))?;
+            self.lean_public_keys[index]
+                .verify(&self.lean_messages[index], &self.lean_signatures[index])
+                .with_context(|| format!("XMSS signature failed validation for signer {index}"))?;
         }
 
         self.bls.validate_raw()?;

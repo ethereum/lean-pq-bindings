@@ -1645,6 +1645,8 @@ name = "lean-pq"
 version = "0.7.0"
 dependencies = [
  "leanvm",
+ "proptest",
+ "thiserror",
 ]
 
 [[package]]

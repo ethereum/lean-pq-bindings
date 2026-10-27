@@ -249,7 +249,9 @@ pub unsafe extern "C" fn lpq_xmss_verify(
         let message = bytes32(message, message_len, "message")?;
         let signature = xmss::Signature::from_bytes(bytes(signature, signature_len, "signature")?)
             .map_err(|e| e.to_string())?;
-        xmss::verify(&public_key, &message, &signature).map_err(|e| e.to_string())
+        public_key
+            .verify(&message, &signature)
+            .map_err(|e| e.to_string())
     })
 }
 
@@ -363,7 +365,9 @@ pub unsafe extern "C" fn lpq_sphincs_verify(
         let signature =
             sphincs::Signature::from_bytes(bytes(signature, signature_len, "signature")?)
                 .map_err(|e| e.to_string())?;
-        sphincs::verify(&public_key, &message, &signature).map_err(|e| e.to_string())
+        public_key
+            .verify(&message, &signature)
+            .map_err(|e| e.to_string())
     })
 }
 

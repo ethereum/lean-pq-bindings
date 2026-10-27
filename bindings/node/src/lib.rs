@@ -410,12 +410,11 @@ pub fn xmss_secret_key_from_bytes(data: Buffer) -> AsyncTask<XmssKeyTask> {
 
 #[napi]
 pub fn xmss_verify(public_key: Buffer, message: Buffer, signature: Buffer) -> Result<()> {
-    xmss::verify(
-        &xmss::PublicKey::from_bytes(&public_key).map_err(api_error)?,
-        &to_message(&message)?,
-        &xmss::Signature::from_bytes(&signature).map_err(api_error)?,
-    )
-    .map_err(api_error)
+    let public_key = xmss::PublicKey::from_bytes(&public_key).map_err(api_error)?;
+    let signature = xmss::Signature::from_bytes(&signature).map_err(api_error)?;
+    public_key
+        .verify(&to_message(&message)?, &signature)
+        .map_err(api_error)
 }
 
 #[napi(ts_return_type = "Promise<SphincsSecretKey>")]
@@ -441,12 +440,11 @@ pub fn sphincs_secret_key_from_bytes(data: Buffer) -> AsyncTask<SphincsKeyTask> 
 
 #[napi]
 pub fn sphincs_verify(public_key: Buffer, message: Buffer, signature: Buffer) -> Result<()> {
-    sphincs::verify(
-        &sphincs::PublicKey::from_bytes(&public_key).map_err(api_error)?,
-        &to_message(&message)?,
-        &sphincs::Signature::from_bytes(&signature).map_err(api_error)?,
-    )
-    .map_err(api_error)
+    let public_key = sphincs::PublicKey::from_bytes(&public_key).map_err(api_error)?;
+    let signature = sphincs::Signature::from_bytes(&signature).map_err(api_error)?;
+    public_key
+        .verify(&to_message(&message)?, &signature)
+        .map_err(api_error)
 }
 
 #[napi(ts_return_type = "Promise<Aggregate>")]
