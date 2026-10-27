@@ -15,7 +15,9 @@ raises `ValueError`. Key generation, signing, verification, aggregation, and
 aggregate decoding release the GIL.
 
 Requires Python >= 3.11. Wheels are built for Linux (x86_64, aarch64; glibc +
-musl) and macOS arm64.
+musl), macOS arm64, and Windows x86_64. The Windows wheels link the C runtime
+statically, so they need no Visual C++ redistributable. x86_64 wheels require
+a CPU with AVX2 and PCLMULQDQ.
 
 ## Install
 
