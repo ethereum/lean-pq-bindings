@@ -1,6 +1,6 @@
 [package]
 name = "lean-pq"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 publish = false
 description = "Safe Rust API for leanVM's leanXMSS and leanSPHINCS signatures and their aggregation"
