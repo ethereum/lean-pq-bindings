@@ -103,6 +103,36 @@ jobs:
       - name: Run a Maven consumer of the Java bindings
         run: sh bindings/java/scripts/consumer-smoke.sh
 
+  # The release's Windows build: x86_64-pc-windows-gnu, checked to import only DLLs Windows ships,
+  # then loaded from the jar through the per-user cache by a fresh modular consumer.
+  java-windows:
+    name: Java 25 / Windows
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build the Windows native library
+        run: sh bindings/java/scripts/build-native.sh windows-x86_64 native
+
+      - name: Run a Maven consumer of the Java bindings
+        run: sh bindings/java/scripts/consumer-smoke.sh -PleanPqNativeDir="$GITHUB_WORKSPACE/native"
+
   node:
     name: Node.js
     runs-on: ubuntu-latest
