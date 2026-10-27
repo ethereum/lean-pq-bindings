@@ -238,7 +238,7 @@ fn xmss_verify(
     let public_key = xmss_public_key(public_key)?;
     let message = self::message(message)?;
     let signature = xmss_signature(signature)?;
-    py.detach(|| xmss::verify(&public_key, &message, &signature))
+    py.detach(|| public_key.verify(&message, &signature))
         .map_err(api_error)
 }
 
@@ -252,7 +252,7 @@ fn sphincs_verify(
     let public_key = sphincs_public_key(public_key)?;
     let message = self::message(message)?;
     let signature = sphincs_signature(signature)?;
-    py.detach(|| sphincs::verify(&public_key, &message, &signature))
+    py.detach(|| public_key.verify(&message, &signature))
         .map_err(api_error)
 }
 

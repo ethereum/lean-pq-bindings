@@ -15,9 +15,7 @@ fn verify_lean_independent_signatures(fixtures: &FixtureSet) -> bool {
         .iter()
         .zip(fixtures.lean_public_keys())
         .zip(fixtures.lean_messages())
-        .all(|((signature, public_key), message)| {
-            xmss::verify(public_key, message, signature).is_ok()
-        })
+        .all(|((signature, public_key), message)| public_key.verify(message, signature).is_ok())
 }
 
 fn single_operations(criterion: &mut Criterion) {
@@ -35,7 +33,7 @@ fn single_operations(criterion: &mut Criterion) {
     let bls_signature = &fixtures.bls_signatures()[0];
     let bls_public_key = &fixtures.bls_public_keys()[0];
 
-    assert!(xmss::verify(lean_public_key, lean_message, lean_signature).is_ok());
+    assert!(lean_public_key.verify(lean_message, lean_signature).is_ok());
     assert!(bls_signature.verify(bls_public_key, bls_message));
 
     let artifact_sizes = [
@@ -69,7 +67,9 @@ fn single_operations(criterion: &mut Criterion) {
         .expect("fixture XMSS signature deserialization should succeed");
     let decoded_bls_signature = lighthouse_bls::Signature::deserialize(&bls_signature_bytes)
         .expect("fixture BLS signature deserialization should succeed");
-    assert!(xmss::verify(lean_public_key, lean_message, &decoded_lean_signature).is_ok());
+    assert!(lean_public_key
+        .verify(lean_message, &decoded_lean_signature)
+        .is_ok());
     assert!(decoded_bls_signature.verify(bls_public_key, bls_message));
 
     let mut group = criterion.benchmark_group("raw_signature_serialize");
@@ -103,11 +103,10 @@ fn single_operations(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("single_verify");
     group.bench_function("lean", |bencher| {
         bencher.iter(|| {
-            black_box(xmss::verify(
-                black_box(lean_public_key),
-                black_box(lean_message),
-                black_box(lean_signature),
-            ))
+            black_box(
+                black_box(lean_public_key)
+                    .verify(black_box(lean_message), black_box(lean_signature)),
+            )
         });
     });
     group.bench_function("lighthouse", |bencher| {

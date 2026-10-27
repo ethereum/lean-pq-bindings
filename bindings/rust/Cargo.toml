@@ -12,3 +12,16 @@ categories = ["cryptography"]
 
 [dependencies]
 leanvm = { workspace = true }
+thiserror = "2.0.21"
+
+[dev-dependencies]
+proptest = { version = "1.12", default-features = false, features = ["std"] }
+
+[lints.rust]
+missing_debug_implementations = "warn"
+missing_docs = "warn"
+unreachable_pub = "warn"
+unsafe_code = "forbid"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }

@@ -142,7 +142,7 @@ fn fixture_signers_are_deterministic_real_signatures_in_the_mock_range() {
     );
     assert_eq!(message, deterministic_key_material(1).unwrap());
     assert!((FIXTURE_FIRST_LEAF..=FIXTURE_LAST_LEAF).contains(&signature.leaf_index()));
-    lean_pq::xmss::verify(&public_key, &message, &signature).unwrap();
+    public_key.verify(&message, &signature).unwrap();
 }
 
 #[test]
