@@ -435,7 +435,8 @@ jobs:
         run: |
           version=${RELEASE_TAG#v}
           case "$version" in *-*) tag=next ;; *) tag=latest ;; esac
-          root="dist/kevaundray-lean-pq-$version.tgz"
+          # Tarball paths need ./ — npm reads dist/name.tgz as the GitHub repository dist/name.tgz.
+          root="./dist/kevaundray-lean-pq-$version.tgz"
           publish() {
             name=$(tar -xzOf "$1" package/package.json | node -p 'JSON.parse(require("fs").readFileSync(0)).name')
             if [ "$(npm view "$name@$version" version 2>/dev/null)" = "$version" ]; then
@@ -444,7 +445,7 @@ jobs:
               npm publish "$1" --access public --provenance --tag "$tag"
             fi
           }
-          for tarball in dist/*.tgz; do
+          for tarball in ./dist/*.tgz; do
             if [ "$tarball" != "$root" ]; then publish "$tarball"; fi
           done
           publish "$root"
