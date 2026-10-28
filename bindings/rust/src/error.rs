@@ -2,9 +2,10 @@
 
 use std::fmt;
 
-use leanvm::lean_sphincs::{LeanSphincsSignError, LeanSphincsVerifyError};
-use leanvm::lean_xmss::{LeanXmssSignError, LeanXmssVerifyError};
+#[cfg(feature = "aggregation")]
 use leanvm::{AggregateVerifyError, AggregationError};
+use signatures::lean_sphincs::{LeanSphincsSignError, LeanSphincsVerifyError};
+use signatures::lean_xmss::{LeanXmssSignError, LeanXmssVerifyError};
 
 use crate::xmss::LeafIndex;
 
@@ -69,6 +70,7 @@ pub enum Error {
     },
 
     /// A raw leanXMSS signature handed to aggregation does not verify.
+    #[cfg(feature = "aggregation")]
     #[error("leanXMSS input {index} (leaf index {leaf_index}) does not verify: {reason}")]
     InvalidXmssInput {
         /// Position of the input in the leanXMSS list.
@@ -80,6 +82,7 @@ pub enum Error {
     },
 
     /// A raw leanSPHINCS signature handed to aggregation does not verify.
+    #[cfg(feature = "aggregation")]
     #[error("leanSPHINCS input {index} does not verify: {reason}")]
     InvalidSphincsInput {
         /// Position of the input in the leanSPHINCS list.
@@ -89,6 +92,7 @@ pub enum Error {
     },
 
     /// One aggregation was given more children than one proof can recurse over.
+    #[cfg(feature = "aggregation")]
     #[error("aggregation takes at most {max} children, got {count}")]
     TooManyChildren {
         /// The number of children supplied.
@@ -101,6 +105,7 @@ pub enum Error {
     ///
     /// Empty input and too many signers for one proof both land here.
     #[error("aggregation failed: {reason}")]
+    #[cfg(feature = "aggregation")]
     Aggregation {
         /// The upstream failure.
         reason: AggregationError,
@@ -108,6 +113,7 @@ pub enum Error {
 
     /// An encoded aggregate is malformed or its proof does not verify.
     #[error("invalid aggregate: {reason}")]
+    #[cfg(feature = "aggregation")]
     InvalidAggregate {
         /// The decoding or verification step that rejected it.
         reason: AggregateVerifyError,

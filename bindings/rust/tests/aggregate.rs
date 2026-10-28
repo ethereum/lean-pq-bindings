@@ -1,4 +1,5 @@
 //! leanXMSS and leanSPHINCS aggregation through the safe facade.
+#![cfg(feature = "aggregation")]
 
 use std::sync::LazyLock;
 

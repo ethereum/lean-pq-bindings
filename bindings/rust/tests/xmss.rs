@@ -2,9 +2,9 @@
 
 use lean_pq::xmss::{LeafIndex, PublicKey, SecretKey, Signature, SIGNATURE_LEN};
 use lean_pq::{Encoding, Error, PUBLIC_KEY_LEN};
-use leanvm::lean_xmss::LeanXmssVerifyError;
 use proptest::collection::vec;
 use proptest::prelude::*;
+use signatures::lean_xmss::LeanXmssVerifyError;
 
 #[test]
 fn signs_and_verifies_at_the_boundary_leaf_indices() {

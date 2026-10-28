@@ -24,12 +24,12 @@
 
 use std::fmt;
 
-use leanvm::lean_xmss::{
+use rand::random;
+use signatures::lean_xmss::{
     key_gen_from_seed, sign as xmss_sign, verify as xmss_verify, LeafIndex as UpstreamLeafIndex,
     LeanXmssPublicKey, LeanXmssSecretKey, LeanXmssSignature, Seed as UpstreamSeed, PUB_KEY_SIZE,
     SEED_LEN as UPSTREAM_SEED_LEN, SIG_SIZE,
 };
-use leanvm::rand::random;
 
 use crate::{Encoding, Error, Message, PUBLIC_KEY_LEN};
 

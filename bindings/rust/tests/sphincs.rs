@@ -4,9 +4,9 @@ use lean_pq::sphincs::{
     PublicKey, SecretKey, Signature, MAX_KEPT_HEIGHT, SECRET_KEY_LEN, SIGNATURE_LEN,
 };
 use lean_pq::{Encoding, Error, PUBLIC_KEY_LEN};
-use leanvm::lean_sphincs::LeanSphincsVerifyError;
 use proptest::collection::vec;
 use proptest::prelude::*;
+use signatures::lean_sphincs::LeanSphincsVerifyError;
 
 #[test]
 fn signs_verifies_and_rejects_another_message() {

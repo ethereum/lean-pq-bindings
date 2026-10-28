@@ -23,6 +23,11 @@ lean-pq = { git = "https://github.com/ethereum/lean-pq-bindings.git", tag = "v0.
 
 Build in release mode: debug builds of leanVM prove far slower.
 
+Aggregation is the default `aggregation` feature, which pulls in leanVM's prover and verifier. To
+only sign and verify, add `default-features = false` to the dependency: the crate then builds from
+leanVM's `signatures` crate alone, and `aggregate`, `setup`, `Aggregate` and `MAX_CHILDREN` are
+not compiled.
+
 ## Sign and verify
 
 ```rust

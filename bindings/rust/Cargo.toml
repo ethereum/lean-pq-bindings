@@ -10,8 +10,16 @@ readme = "README.md"
 keywords = ["cryptography", "signature", "xmss", "sphincs", "post-quantum"]
 categories = ["cryptography"]
 
+[features]
+default = ["aggregation"]
+# Recursive aggregation through the leanVM prover and verifier. Without it the crate builds only
+# leanXMSS and leanSPHINCS, from leanVM's `signatures` crate.
+aggregation = ["dep:leanvm"]
+
 [dependencies]
-leanvm = { workspace = true }
+leanvm = { workspace = true, optional = true }
+rand = { workspace = true }
+signatures = { workspace = true }
 thiserror = "2.0.21"
 
 [dev-dependencies]
