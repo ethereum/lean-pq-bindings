@@ -27,8 +27,8 @@ use std::fmt;
 use rand::random;
 use signatures::lean_xmss::{
     key_gen_from_seed, sign as xmss_sign, verify as xmss_verify, LeafIndex as UpstreamLeafIndex,
-    LeanXmssPublicKey, LeanXmssSecretKey, LeanXmssSignature, Seed as UpstreamSeed, PUB_KEY_SIZE,
-    SEED_LEN as UPSTREAM_SEED_LEN, SIG_SIZE,
+    LeanXmssPublicKey, LeanXmssSecretKey, LeanXmssSignature, Seed as UpstreamSeed,
+    LOG_LIFETIME as UPSTREAM_LOG_LIFETIME, PUB_KEY_SIZE, SEED_LEN as UPSTREAM_SEED_LEN, SIG_SIZE,
 };
 
 use crate::{Encoding, Error, Message, PUBLIC_KEY_LEN};
@@ -60,10 +60,22 @@ pub type LeafIndex = u32;
 /// The seed a key is derived from.
 pub type Seed = [u8; SEED_LEN];
 
+/// Base-2 logarithm of a key's lifetime: a key signs at `2^LOG_LIFETIME` leaf indices.
+///
+/// ```text
+///     bottom trees    2^16, each over 2^16 leaves
+///     leaf indices    2^16 * 2^16 = 2^32, every LeafIndex from 0 to LeafIndex::MAX
+/// ```
+///
+/// Every key has this lifetime: it is fixed by the scheme, not chosen at key generation.
+pub const LOG_LIFETIME: usize = 32;
+
 // Invariant: the sizes and types above are the upstream ones, checked at compile time.
 const _: () = assert!(SEED_LEN == UPSTREAM_SEED_LEN);
 const _: () = assert!(SIGNATURE_LEN == SIG_SIZE);
 const _: () = assert!(PUBLIC_KEY_LEN == PUB_KEY_SIZE);
+const _: () = assert!(LOG_LIFETIME == UPSTREAM_LOG_LIFETIME);
+const _: () = assert!(LOG_LIFETIME == LeafIndex::BITS as usize);
 const _: fn(UpstreamLeafIndex) -> LeafIndex = |index| index;
 const _: fn(UpstreamSeed) -> Seed = |seed| seed;
 
