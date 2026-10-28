@@ -17,7 +17,7 @@ decoding return Promises so their native work does not block the JavaScript even
 
 <!-- x-release-please-start-version -->
 ```sh
-npm install @kevaundray/lean-pq@0.7.0
+npm install @kevaundray/lean-pq@0.8.0
 ```
 <!-- x-release-please-end -->
 
