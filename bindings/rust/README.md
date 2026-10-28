@@ -17,7 +17,7 @@ The crate is not on crates.io: it depends on leanVM by git revision.
 <!-- x-release-please-start-version -->
 ```toml
 [dependencies]
-lean-pq = { git = "https://github.com/ethereum/lean-pq-bindings.git", tag = "v0.7.0" }
+lean-pq = { git = "https://github.com/ethereum/lean-pq-bindings.git", tag = "v0.8.0" }
 ```
 <!-- x-release-please-end -->
 

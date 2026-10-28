@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.8.0](https://github.com/ethereum/lean-pq-bindings/compare/v0.7.0...v0.8.0) (2026-10-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* **rust:** rebuild the Rust facade with typed errors ([#39](https://github.com/ethereum/lean-pq-bindings/issues/39))
+
+### Features
+
+* **rust:** make leanVM aggregation an optional default feature ([#41](https://github.com/ethereum/lean-pq-bindings/issues/41)) ([39cd44b](https://github.com/ethereum/lean-pq-bindings/commit/39cd44bd9bbe558b946abea257a6b77750cc6620))
+
+
+### Code Refactoring
+
+* **rust:** rebuild the Rust facade with typed errors ([#39](https://github.com/ethereum/lean-pq-bindings/issues/39)) ([03d576e](https://github.com/ethereum/lean-pq-bindings/commit/03d576ec7b958d03ffc963a5ecb6b86d64a19bf0))
+
 ## [0.7.0](https://github.com/ethereum/lean-pq-bindings/compare/v0.6.2...v0.7.0) (2026-10-27)
 
 
