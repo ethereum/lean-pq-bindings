@@ -13,7 +13,11 @@ resolver = "2"
 version = "0.7.0"
 
 [workspace.dependencies]
+# `leanvm` and `signatures` must name the same revision: `signatures` is the leanXMSS/leanSPHINCS
+# crate inside leanVM, which `leanvm` re-exports alongside the aggregation prover.
 leanvm = { git = "https://github.com/leanEthereum/leanVM.git", rev = "a39758de10f35c7b34023d061cc05dfc0b36d43a" }
+signatures = { git = "https://github.com/leanEthereum/leanVM.git", rev = "a39758de10f35c7b34023d061cc05dfc0b36d43a" }
+rand = "0.9"
 lean-pq = { path = "bindings/rust" }
 
 [profile.release]

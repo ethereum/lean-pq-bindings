@@ -28,12 +28,12 @@
 
 use std::fmt;
 
-use leanvm::lean_sphincs::{
+use rand::random;
+use signatures::lean_sphincs::{
     key_gen_from_seed, sign as sphincs_sign, verify as sphincs_verify, LeanSphincsPublicKey,
     LeanSphincsSecretKey, LeanSphincsSignature, MasterSecret, H, MASTER_SECRET_LEN, PUB_KEY_SIZE,
     SECRET_KEY_SIZE, SIG_SIZE,
 };
-use leanvm::rand::random;
 
 use crate::{Encoding, Error, Message, PUBLIC_KEY_LEN};
 

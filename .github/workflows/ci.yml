@@ -31,6 +31,14 @@ jobs:
       - name: Lint Rust bindings
         run: cargo clippy --release -p lean-pq --all-targets -- -D warnings
 
+      # Consumers that only sign and verify build without the leanVM prover.
+      # The README's aggregation example is a doctest, so only the lib and integration tests run.
+      - name: Test Rust bindings without aggregation
+        run: cargo test --release -p lean-pq --no-default-features --lib --tests
+
+      - name: Lint Rust bindings without aggregation
+        run: cargo clippy --release -p lean-pq --no-default-features --all-targets -- -D warnings
+
   test:
     name: ${{ matrix.os }} / py${{ matrix.python }}
     strategy:
