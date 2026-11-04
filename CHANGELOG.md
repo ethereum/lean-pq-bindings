@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.0](https://github.com/ethereum/lean-pq-bindings/compare/v0.8.0...v0.9.0) (2026-11-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* update leanVM to ed7d2b9 and its new leanSPHINCS ([#44](https://github.com/ethereum/lean-pq-bindings/issues/44))
+
+### Features
+
+* **rust:** expose the leanXMSS lifetime as xmss::LOG_LIFETIME ([#42](https://github.com/ethereum/lean-pq-bindings/issues/42)) ([0cc7bc6](https://github.com/ethereum/lean-pq-bindings/commit/0cc7bc6c7de965ce166498546b2a549dac65ca1d))
+* update leanVM to ed7d2b9 and its new leanSPHINCS ([#44](https://github.com/ethereum/lean-pq-bindings/issues/44)) ([f262172](https://github.com/ethereum/lean-pq-bindings/commit/f262172eb107ebaa102938d958f27e6aad571270))
+
 ## [0.8.0](https://github.com/ethereum/lean-pq-bindings/compare/v0.7.0...v0.8.0) (2026-10-28)
 
 
