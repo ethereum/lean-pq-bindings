@@ -27,7 +27,7 @@ public final class LeanPq {
             Objects.requireNonNull(signature, "signature"));
     }
 
-    /** Returns whether the 4276-byte leanSPHINCS signature is valid for the public key and message. */
+    /** Returns whether the 7740-byte leanSPHINCS signature is valid for the public key and message. */
     public static boolean sphincsVerify(byte[] publicKey, byte[] message, byte[] signature) {
         return Native.sphincsVerify(
             Native.requireLength(publicKey, Native.PUBLIC_KEY_LENGTH, "publicKey"),

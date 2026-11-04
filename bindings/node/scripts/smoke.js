@@ -19,7 +19,7 @@ async function main() {
   lpq.xmssVerify(xmssKey.publicKey, message, xmssSignature)
   assert.throws(() => lpq.xmssVerify(xmssKey.publicKey, other, xmssSignature), /leanXMSS/)
 
-  const sphincsKey = await lpq.SphincsSecretKey.fromSeed(Buffer.alloc(32, 2), 4)
+  const sphincsKey = await lpq.SphincsSecretKey.fromSeed(Buffer.alloc(32, 2))
   const sphincsSignature = await sphincsKey.sign(message)
   lpq.sphincsVerify(sphincsKey.publicKey, message, sphincsSignature)
   assert.throws(() => lpq.sphincsVerify(sphincsKey.publicKey, other, sphincsSignature), /leanSPHINCS/)

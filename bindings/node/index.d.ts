@@ -7,10 +7,9 @@ export declare class Aggregate {
 }
 
 export declare class SphincsSecretKey {
-  /** SECRET KEY MATERIAL: the seed, then the kept height. */
+  /** SECRET KEY MATERIAL: the seed. */
   toBytes(): Buffer
   get publicKey(): Buffer
-  get keptHeight(): number
   sign(message: Buffer): Promise<Buffer>
 }
 
@@ -32,7 +31,7 @@ export interface Claim {
   message: Buffer
 }
 
-export declare function generateSphincsSecretKey(keptHeight: number): Promise<SphincsSecretKey>
+export declare function generateSphincsSecretKey(): Promise<SphincsSecretKey>
 
 export declare function generateXmssSecretKey(): Promise<XmssSecretKey>
 
@@ -47,7 +46,7 @@ export interface SignedMessage {
 
 export declare function sphincsSecretKeyFromBytes(data: Buffer): Promise<SphincsSecretKey>
 
-export declare function sphincsSecretKeyFromSeed(seed: Buffer, keptHeight: number): Promise<SphincsSecretKey>
+export declare function sphincsSecretKeyFromSeed(seed: Buffer): Promise<SphincsSecretKey>
 
 export declare function sphincsVerify(publicKey: Buffer, message: Buffer, signature: Buffer): void
 

@@ -15,9 +15,9 @@ test('signs and verifies with both schemes', async () => {
   lpq.xmssVerify(xmssKey.publicKey, message, xmssSignature)
   assert.throws(() => lpq.xmssVerify(xmssKey.publicKey, other, xmssSignature), /leanXMSS/)
 
-  const sphincsKey = await lpq.SphincsSecretKey.fromSeed(seed(2), 4)
+  const sphincsKey = await lpq.SphincsSecretKey.fromSeed(seed(2))
   const sphincsSignature = await sphincsKey.sign(message)
-  assert.equal(sphincsSignature.length, 4276)
+  assert.equal(sphincsSignature.length, 7740)
   lpq.sphincsVerify(sphincsKey.publicKey, message, sphincsSignature)
   assert.throws(() => lpq.sphincsVerify(sphincsKey.publicKey, other, sphincsSignature), /leanSPHINCS/)
 })
@@ -30,10 +30,11 @@ test('round trips secret keys through bytes', async () => {
   assert.deepEqual(xmssRestored.publicKey, xmssKey.publicKey)
   lpq.xmssVerify(xmssKey.publicKey, message, await xmssRestored.sign(message, 9))
 
-  const sphincsKey = await lpq.SphincsSecretKey.fromSeed(seed(4), 3)
-  const sphincsRestored = await lpq.SphincsSecretKey.fromBytes(sphincsKey.toBytes())
+  const sphincsKey = await lpq.SphincsSecretKey.fromSeed(seed(4))
+  const sphincsBytes = sphincsKey.toBytes()
+  assert.deepEqual(sphincsBytes, seed(4))
+  const sphincsRestored = await lpq.SphincsSecretKey.fromBytes(sphincsBytes)
   assert.deepEqual(sphincsRestored.publicKey, sphincsKey.publicKey)
-  assert.equal(sphincsRestored.keptHeight, 3)
   lpq.sphincsVerify(sphincsKey.publicKey, message, await sphincsRestored.sign(message))
 })
 
@@ -41,7 +42,7 @@ test('aggregates both schemes recursively', async () => {
   const first = Buffer.alloc(32, 0x11)
   const second = Buffer.alloc(32, 0x22)
   const xmssKey = await lpq.XmssSecretKey.fromSeed(seed(5))
-  const sphincsKey = await lpq.SphincsSecretKey.fromSeed(seed(6), 4)
+  const sphincsKey = await lpq.SphincsSecretKey.fromSeed(seed(6))
 
   const left = await lpq.aggregate({
     xmss: [{ publicKey: xmssKey.publicKey, message: first, signature: await xmssKey.sign(first, 0) }],

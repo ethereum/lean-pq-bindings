@@ -19,8 +19,8 @@ import (
 const (
 	statusOK = C.int32_t(0)
 
-	keyLen            = 32
-	claimRecordLen    = 2 * keyLen
+	keyLen            = len(Claim{}.PublicKey)
+	claimRecordLen    = keyLen + len(Claim{}.Message)
 	xmssRecordLen     = claimRecordLen + len(XmssSignature{})
 	sphincsRecordLen  = claimRecordLen + len(SphincsSignature{})
 	maxBufferLen      = 1<<31 - 1
@@ -31,7 +31,7 @@ const (
 type XmssSignature [2404]byte
 
 // SphincsSignature is an encoded leanSPHINCS signature.
-type SphincsSignature [4276]byte
+type SphincsSignature [7740]byte
 
 // XmssSignedMessage is a leanXMSS signature over Message by PublicKey, as input to aggregation.
 type XmssSignedMessage struct {
@@ -175,20 +175,19 @@ func XmssVerify(publicKey, message [32]byte, signature XmssSignature) error {
 	))
 }
 
-// GenerateSphincsSecretKey creates a random leanSPHINCS key keeping a subtree of keptHeight.
-func GenerateSphincsSecretKey(keptHeight uint32) (*SphincsSecretKey, error) {
+// GenerateSphincsSecretKey creates a random leanSPHINCS key.
+func GenerateSphincsSecretKey() (*SphincsSecretKey, error) {
 	var handle *C.lpq_sphincs_secret_key
-	if err := checkStatus(C.lpq_sphincs_secret_key_generate(C.uint32_t(keptHeight), &handle)); err != nil {
+	if err := checkStatus(C.lpq_sphincs_secret_key_generate(&handle)); err != nil {
 		return nil, err
 	}
 	return &SphincsSecretKey{handle: handle}, nil
 }
 
-// SphincsSecretKeyFromSeed deterministically creates a leanSPHINCS key keeping a subtree of
-// keptHeight.
-func SphincsSecretKeyFromSeed(seed [32]byte, keptHeight uint32) (*SphincsSecretKey, error) {
+// SphincsSecretKeyFromSeed deterministically creates a leanSPHINCS key from seed.
+func SphincsSecretKeyFromSeed(seed [32]byte) (*SphincsSecretKey, error) {
 	var handle *C.lpq_sphincs_secret_key
-	status := C.lpq_sphincs_secret_key_from_seed(arrayPointer(&seed), C.size_t(len(seed)), C.uint32_t(keptHeight), &handle)
+	status := C.lpq_sphincs_secret_key_from_seed(arrayPointer(&seed), C.size_t(len(seed)), &handle)
 	if err := checkStatus(status); err != nil {
 		return nil, err
 	}
@@ -204,7 +203,7 @@ func SphincsSecretKeyFromBytes(bytes []byte) (*SphincsSecretKey, error) {
 	return &SphincsSecretKey{handle: handle}, nil
 }
 
-// Bytes returns the key's secret encoding (its 32-byte seed followed by its kept height).
+// Bytes returns the key's secret encoding (its 32-byte seed).
 func (key *SphincsSecretKey) Bytes() ([]byte, error) {
 	key.mu.Lock()
 	defer key.mu.Unlock()
@@ -228,20 +227,6 @@ func (key *SphincsSecretKey) PublicKey() ([32]byte, error) {
 		return C.lpq_sphincs_secret_key_public_key(key.handle, output)
 	})
 	return publicKey, err
-}
-
-// KeptHeight returns the height of the subtree the key keeps.
-func (key *SphincsSecretKey) KeptHeight() (uint32, error) {
-	key.mu.Lock()
-	defer key.mu.Unlock()
-	if key.handle == nil {
-		return 0, errClosed("leanSPHINCS secret key")
-	}
-	var keptHeight C.uint32_t
-	if err := checkStatus(C.lpq_sphincs_secret_key_kept_height(key.handle, &keptHeight)); err != nil {
-		return 0, err
-	}
-	return uint32(keptHeight), nil
 }
 
 // Sign signs message.

@@ -3,7 +3,6 @@ const lpq = @import("lean_pq");
 
 const message: lpq.Message = [_]u8{0x42} ** 32;
 const other_message: lpq.Message = [_]u8{0x43} ** 32;
-const kept_height = 4;
 
 test "leanXMSS signs and verifies" {
     var key = try lpq.XmssSecretKey.fromSeed([_]u8{1} ** 32);
@@ -17,9 +16,10 @@ test "leanXMSS signs and verifies" {
 }
 
 test "leanSPHINCS signs and verifies" {
-    var key = try lpq.SphincsSecretKey.fromSeed([_]u8{2} ** 32, kept_height);
+    const seed: lpq.Seed = [_]u8{2} ** 32;
+    var key = try lpq.SphincsSecretKey.fromSeed(seed);
     defer key.deinit();
-    try std.testing.expectEqual(@as(u32, kept_height), try key.keptHeight());
+    try std.testing.expectEqual(seed, try key.toBytes());
     const public_key = try key.publicKey();
     const signature = try key.sign(message);
 
@@ -34,13 +34,12 @@ test "secret keys round trip through bytes" {
     defer xmss_restored.deinit();
     try std.testing.expectEqual(try xmss.publicKey(), try xmss_restored.publicKey());
 
-    var sphincs = try lpq.SphincsSecretKey.generate(kept_height);
+    var sphincs = try lpq.SphincsSecretKey.generate();
     defer sphincs.deinit();
     const sphincs_bytes = try sphincs.toBytes();
     var sphincs_restored = try lpq.SphincsSecretKey.fromBytes(&sphincs_bytes);
     defer sphincs_restored.deinit();
     try std.testing.expectEqual(try sphincs.publicKey(), try sphincs_restored.publicKey());
-    try std.testing.expectEqual(@as(u32, kept_height), try sphincs_restored.keptHeight());
     try std.testing.expectEqual(sphincs_bytes, try sphincs_restored.toBytes());
 }
 
@@ -50,7 +49,7 @@ test "aggregates recursively and round trips through bytes" {
 
     var xmss_key = try lpq.XmssSecretKey.fromSeed([_]u8{3} ** 32);
     defer xmss_key.deinit();
-    var sphincs_key = try lpq.SphincsSecretKey.fromSeed([_]u8{4} ** 32, kept_height);
+    var sphincs_key = try lpq.SphincsSecretKey.fromSeed([_]u8{4} ** 32);
     defer sphincs_key.deinit();
     var extra_key = try lpq.XmssSecretKey.fromSeed([_]u8{5} ** 32);
     defer extra_key.deinit();

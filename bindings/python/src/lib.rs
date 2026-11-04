@@ -114,26 +114,17 @@ struct PySphincsSecretKey {
 #[pymethods]
 impl PySphincsSecretKey {
     #[classmethod]
-    fn generate(_cls: &Bound<'_, PyType>, py: Python<'_>, kept_height: usize) -> PyResult<Self> {
-        Ok(Self {
-            inner: py
-                .detach(|| sphincs::SecretKey::generate(kept_height))
-                .map_err(api_error)?,
-        })
+    fn generate(_cls: &Bound<'_, PyType>, py: Python<'_>) -> Self {
+        Self {
+            inner: py.detach(sphincs::SecretKey::generate),
+        }
     }
 
     #[classmethod]
-    fn from_seed(
-        _cls: &Bound<'_, PyType>,
-        py: Python<'_>,
-        seed: &[u8],
-        kept_height: usize,
-    ) -> PyResult<Self> {
+    fn from_seed(_cls: &Bound<'_, PyType>, py: Python<'_>, seed: &[u8]) -> PyResult<Self> {
         let seed = fixed(seed, "seed")?;
         Ok(Self {
-            inner: py
-                .detach(move || sphincs::SecretKey::from_seed(seed, kept_height))
-                .map_err(api_error)?,
+            inner: py.detach(move || sphincs::SecretKey::from_seed(seed)),
         })
     }
 
@@ -153,11 +144,6 @@ impl PySphincsSecretKey {
     #[getter]
     fn public_key<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
         PyBytes::new(py, &self.inner.public_key().to_bytes())
-    }
-
-    #[getter]
-    fn kept_height(&self) -> usize {
-        self.inner.kept_height()
     }
 
     fn sign<'py>(&self, py: Python<'py>, message: &[u8]) -> PyResult<Bound<'py, PyBytes>> {

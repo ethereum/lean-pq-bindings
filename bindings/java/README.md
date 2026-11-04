@@ -5,11 +5,11 @@ and their zkVM-backed aggregation:
 
 - **leanXMSS**: stateful. A key signs at unsigned 32-bit leaf indices; never sign two different
   messages at the same leaf index.
-- **leanSPHINCS**: stateless. A key keeps one subtree of height `keptHeight` (at most 26), which
-  trades signing capacity for key generation time.
+- **leanSPHINCS**: stateless. A key is its 32-byte seed, signs at most 2^30 messages, and signs
+  deterministically.
 
 Both schemes use 32-byte public keys and sign 32-byte messages. Signatures are plain `byte[]`
-values: 2404 bytes for leanXMSS and 4276 bytes for leanSPHINCS. An `Aggregate` proves that each
+values: 2404 bytes for leanXMSS and 7740 bytes for leanSPHINCS. An `Aggregate` proves that each
 listed public key signed its message, across both schemes, and can absorb earlier aggregates
 recursively.
 
@@ -161,7 +161,7 @@ Builds without `signingInMemoryKey` skip signing. Before the key expires, extend
 import org.ethereum.leanpq.*;
 
 try (XmssSecretKey xmss = XmssSecretKey.fromSeed(seed32);
-     SphincsSecretKey sphincs = SphincsSecretKey.fromSeed(otherSeed32, 4)) {
+     SphincsSecretKey sphincs = SphincsSecretKey.fromSeed(otherSeed32)) {
     byte[] xmssSignature = xmss.sign(message32, 7);
     boolean xmssValid = LeanPq.xmssVerify(xmss.publicKey(), message32, xmssSignature);
 
@@ -173,7 +173,7 @@ try (XmssSecretKey xmss = XmssSecretKey.fromSeed(seed32);
 leanXMSS keys are stateful: persist your own durable high-water leaf index alongside
 `XmssSecretKey.toBytes()` and advance it before publishing a signature. `prepare(leafIndex)`
 precomputes signing state ahead of time. Secret-key bytes are secret material: the 32-byte
-leanXMSS seed, or the 32-byte leanSPHINCS seed followed by its kept height.
+leanXMSS seed or the 32-byte leanSPHINCS seed.
 
 ## Aggregation
 
