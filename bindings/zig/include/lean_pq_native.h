@@ -6,9 +6,8 @@
  * Handles are opaque and must be destroyed exactly once with their matching destroy function.
  * Buffers returned through lpq_buffer must be released with lpq_buffer_free exactly once.
  *
- * Public keys and messages are 32 bytes. leanXMSS secret keys are their 32-byte seed and
- * signatures are 2404 bytes. leanSPHINCS secret keys are the 32-byte seed followed by the kept
- * height (33 bytes), kept heights are at most 26, and signatures are 4276 bytes.
+ * Public keys and messages are 32 bytes. Secret keys in both schemes are their 32-byte seed.
+ * leanXMSS signatures are 2404 bytes and leanSPHINCS signatures are 7740 bytes.
  */
 #ifndef LEAN_PQ_NATIVE_H
 #define LEAN_PQ_NATIVE_H
@@ -36,12 +35,11 @@ void lpq_xmss_secret_key_destroy(lpq_xmss_secret_key *key);
 /* Returns 0 when the signature verifies and 1, with lpq_last_error set, when it does not. */
 int32_t lpq_xmss_verify(const uint8_t *public_key, size_t public_key_len, const uint8_t *message, size_t message_len, const uint8_t *signature, size_t signature_len);
 
-int32_t lpq_sphincs_secret_key_generate(uint32_t kept_height, lpq_sphincs_secret_key **out);
-int32_t lpq_sphincs_secret_key_from_seed(const uint8_t *seed, size_t seed_len, uint32_t kept_height, lpq_sphincs_secret_key **out);
+int32_t lpq_sphincs_secret_key_generate(lpq_sphincs_secret_key **out);
+int32_t lpq_sphincs_secret_key_from_seed(const uint8_t *seed, size_t seed_len, lpq_sphincs_secret_key **out);
 int32_t lpq_sphincs_secret_key_from_bytes(const uint8_t *data, size_t len, lpq_sphincs_secret_key **out);
 int32_t lpq_sphincs_secret_key_to_bytes(lpq_sphincs_secret_key *key, lpq_buffer *out);
 int32_t lpq_sphincs_secret_key_public_key(lpq_sphincs_secret_key *key, lpq_buffer *out);
-int32_t lpq_sphincs_secret_key_kept_height(lpq_sphincs_secret_key *key, uint32_t *out);
 int32_t lpq_sphincs_secret_key_sign(lpq_sphincs_secret_key *key, const uint8_t *message, size_t message_len, lpq_buffer *out);
 void lpq_sphincs_secret_key_destroy(lpq_sphincs_secret_key *key);
 /* Returns 0 when the signature verifies and 1, with lpq_last_error set, when it does not. */
@@ -49,7 +47,7 @@ int32_t lpq_sphincs_verify(const uint8_t *public_key, size_t public_key_len, con
 
 /*
  * Raw signatures are concatenated fixed-width records of public key (32) | message (32) |
- * signature: 2468-byte records for leanXMSS and 4340-byte records for leanSPHINCS. Children are
+ * signature: 2468-byte records for leanXMSS and 7804-byte records for leanSPHINCS. Children are
  * at most 16 aggregates; the call neither consumes nor retains them.
  */
 int32_t lpq_aggregate_create(lpq_aggregate *const *children, size_t child_count, const uint8_t *xmss, size_t xmss_count, const uint8_t *sphincs, size_t sphincs_count, lpq_aggregate **out);

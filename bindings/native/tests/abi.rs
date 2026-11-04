@@ -71,22 +71,16 @@ fn native_abi_signs_verifies_and_aggregates() {
             // leanSPHINCS
             let mut sphincs_key = ptr::null_mut();
             assert_eq!(
-                lpq_sphincs_secret_key_from_seed([9; 32].as_ptr(), 32, 3, &mut sphincs_key),
+                lpq_sphincs_secret_key_from_seed([9; 32].as_ptr(), 32, &mut sphincs_key),
                 OK
             );
-            let mut kept_height = 0;
-            assert_eq!(
-                lpq_sphincs_secret_key_kept_height(sphincs_key, &mut kept_height),
-                OK
-            );
-            assert_eq!(kept_height, 3);
             let mut buffer = LpqBuffer::default();
             assert_eq!(
                 lpq_sphincs_secret_key_to_bytes(sphincs_key, &mut buffer),
                 OK
             );
             let sphincs_sk = take(buffer);
-            assert_eq!(sphincs_sk.len(), 33);
+            assert_eq!(sphincs_sk, [9; 32]);
             let mut restored = ptr::null_mut();
             assert_eq!(
                 lpq_sphincs_secret_key_from_bytes(
@@ -109,7 +103,7 @@ fn native_abi_signs_verifies_and_aggregates() {
                 OK
             );
             let sphincs_sig = take(buffer);
-            assert_eq!(sphincs_sig.len(), 4276);
+            assert_eq!(sphincs_sig.len(), 7740);
             assert_eq!(
                 lpq_sphincs_verify(
                     sphincs_pk.as_ptr(),

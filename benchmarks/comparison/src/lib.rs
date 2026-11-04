@@ -58,7 +58,7 @@ pub fn lean_fixture_signer(index: usize, message_index: usize) -> Result<LeanXms
     let (key, public_key) = mock::key_gen_from_seed(seed, FIXTURE_FIRST_LEAF, FIXTURE_LAST_LEAF);
     let signature = mock::sign(&key, &message, leaf_index)?;
     Ok((
-        lean_pq::xmss::PublicKey::from_bytes(&public_key.flatten())?,
+        lean_pq::xmss::PublicKey::from_bytes(&public_key.to_bytes())?,
         message,
         lean_pq::xmss::Signature::from_bytes(&signature.to_bytes())?,
     ))

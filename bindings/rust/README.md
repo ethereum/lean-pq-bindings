@@ -3,12 +3,10 @@
 Safe Rust bindings for [leanVM](https://github.com/leanEthereum/leanVM)'s post-quantum signatures and their aggregation.
 
 - **leanXMSS** is synchronized: a key signs at `2^32` leaf indices, one message per leaf index.
-- **leanSPHINCS** is stateless: a key keeps one subtree of height `kept_height`, at most 26.
+- **leanSPHINCS** is stateless: a key signs at most `2^30` messages, with no state kept between them.
 - **Aggregation** proves many signatures of both schemes in one recursive leanVM proof.
 
 Public keys and messages are 32 bytes in both schemes.
-
-A smaller leanSPHINCS kept height generates keys faster, signs slower, and shortens the key's lifetime.
 
 ## Install
 
@@ -39,7 +37,7 @@ let xmss_key = xmss::SecretKey::from_seed([0x01; 32]);
 let signature = xmss_key.sign(&message, 7)?;
 xmss_key.public_key().verify(&message, &signature)?;
 
-let sphincs_key = sphincs::SecretKey::from_seed([0x02; 32], 4)?;
+let sphincs_key = sphincs::SecretKey::from_seed([0x02; 32]);
 let signature = sphincs_key.sign(&message)?;
 sphincs_key.public_key().verify(&message, &signature)?;
 # Ok::<(), lean_pq::Error>(())
@@ -49,7 +47,7 @@ A leanXMSS key keeps no record of the leaf indices it used.
 
 Persist a durable high-water leaf index next to the key's bytes, and advance it before publishing a signature.
 
-Secret key bytes are secret material: the leanXMSS seed, or the leanSPHINCS seed then its kept height.
+Secret key bytes are secret material: in both schemes they are the key's 32-byte seed.
 
 ## Aggregate
 
@@ -58,7 +56,7 @@ use lean_pq::{aggregate, sphincs, xmss, Aggregate};
 
 let message = [0x42; 32];
 let xmss_key = xmss::SecretKey::from_seed([0x01; 32]);
-let sphincs_key = sphincs::SecretKey::from_seed([0x02; 32], 4)?;
+let sphincs_key = sphincs::SecretKey::from_seed([0x02; 32]);
 
 let leaf = aggregate(
     &[],
