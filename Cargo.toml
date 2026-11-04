@@ -10,7 +10,7 @@ resolver = "2"
 
 [workspace.package]
 # The release version of every binding; release-please updates it.
-version = "0.8.0"
+version = "0.9.0"
 
 [workspace.dependencies]
 # `leanvm` and `signatures` must name the same revision: `signatures` is the leanXMSS/leanSPHINCS

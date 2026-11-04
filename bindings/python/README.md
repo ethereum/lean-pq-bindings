@@ -23,7 +23,7 @@ a CPU with AVX2 and PCLMULQDQ.
 
 <!-- x-release-please-start-version -->
 ```bash
-pip install py-lean-pq==0.8.0
+pip install py-lean-pq==0.9.0
 ```
 <!-- x-release-please-end -->
 
