@@ -5,6 +5,21 @@ import (
 	"testing"
 )
 
+func TestEncodingLengths(t *testing.T) {
+	if got := len(SphincsSignature{}); got != 7740 {
+		t.Fatalf("leanSPHINCS signature length = %d, want 7740", got)
+	}
+	if sphincsRecordLen != 7804 {
+		t.Fatalf("leanSPHINCS record length = %d, want 7804", sphincsRecordLen)
+	}
+	if got := len(XmssSignature{}); got != 2404 {
+		t.Fatalf("leanXMSS signature length = %d, want 2404", got)
+	}
+	if xmssRecordLen != 2468 {
+		t.Fatalf("leanXMSS record length = %d, want 2468", xmssRecordLen)
+	}
+}
+
 func TestSignAndVerify(t *testing.T) {
 	message := bytes32(0x42)
 	other := bytes32(0x43)
@@ -22,7 +37,7 @@ func TestSignAndVerify(t *testing.T) {
 		t.Fatal("leanXMSS signature must not verify under another message")
 	}
 
-	sphincsKey := mustSphincsKey(t, bytes32(2), 4)
+	sphincsKey := mustSphincsKey(t, bytes32(2))
 	sphincsPublicKey := mustSphincsPublicKey(t, sphincsKey)
 	sphincsSignature, err := sphincsKey.Sign(message)
 	if err != nil {
@@ -61,10 +76,13 @@ func TestSecretKeysRoundTripThroughBytes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sphincsKey := mustSphincsKey(t, bytes32(4), 3)
+	sphincsKey := mustSphincsKey(t, bytes32(4))
 	encoded, err = sphincsKey.Bytes()
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(encoded) != 32 {
+		t.Fatalf("leanSPHINCS secret key encoding has %d bytes, want 32", len(encoded))
 	}
 	restoredSphincs, err := SphincsSecretKeyFromBytes(encoded)
 	if err != nil {
@@ -74,13 +92,6 @@ func TestSecretKeysRoundTripThroughBytes(t *testing.T) {
 	sphincsPublicKey := mustSphincsPublicKey(t, sphincsKey)
 	if mustSphincsPublicKey(t, restoredSphincs) != sphincsPublicKey {
 		t.Fatal("restored leanSPHINCS key must keep its public key")
-	}
-	keptHeight, err := restoredSphincs.KeptHeight()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if keptHeight != 3 {
-		t.Fatalf("kept height = %d, want 3", keptHeight)
 	}
 	sphincsSignature, err := restoredSphincs.Sign(message)
 	if err != nil {
@@ -99,7 +110,7 @@ func TestAggregateRecursively(t *testing.T) {
 	second := bytes32(0x22)
 	xmssKey := mustXmssKey(t, bytes32(5))
 	xmssPublicKey := mustXmssPublicKey(t, xmssKey)
-	sphincsKey := mustSphincsKey(t, bytes32(6), 4)
+	sphincsKey := mustSphincsKey(t, bytes32(6))
 	sphincsPublicKey := mustSphincsPublicKey(t, sphincsKey)
 
 	firstXmss, err := xmssKey.Sign(first, 0)
@@ -177,9 +188,9 @@ func mustXmssKey(t *testing.T, seed [32]byte) *XmssSecretKey {
 	return key
 }
 
-func mustSphincsKey(t *testing.T, seed [32]byte, keptHeight uint32) *SphincsSecretKey {
+func mustSphincsKey(t *testing.T, seed [32]byte) *SphincsSecretKey {
 	t.Helper()
-	key, err := SphincsSecretKeyFromSeed(seed, keptHeight)
+	key, err := SphincsSecretKeyFromSeed(seed)
 	if err != nil {
 		t.Fatal(err)
 	}

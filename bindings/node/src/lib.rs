@@ -110,7 +110,7 @@ pub struct SphincsSecretKey {
 
 #[napi]
 impl SphincsSecretKey {
-    /// SECRET KEY MATERIAL: the seed, then the kept height.
+    /// SECRET KEY MATERIAL: the seed.
     #[napi]
     pub fn to_bytes(&self) -> Buffer {
         self.inner.to_bytes().to_vec().into()
@@ -119,11 +119,6 @@ impl SphincsSecretKey {
     #[napi(getter)]
     pub fn public_key(&self) -> Buffer {
         self.inner.public_key().to_bytes().to_vec().into()
-    }
-
-    #[napi(getter)]
-    pub fn kept_height(&self) -> u32 {
-        self.inner.kept_height() as u32
     }
 
     #[napi(ts_return_type = "Promise<Buffer>")]
@@ -260,8 +255,8 @@ impl Task for XmssSignTask {
 }
 
 pub enum SphincsKeySource {
-    Random(f64),
-    Seed(Vec<u8>, f64),
+    Random,
+    Seed(Vec<u8>),
     Bytes(Vec<u8>),
 }
 
@@ -275,15 +270,10 @@ impl Task for SphincsKeyTask {
 
     fn compute(&mut self) -> Result<Self::Output> {
         match &self.source {
-            SphincsKeySource::Random(kept_height) => {
-                sphincs::SecretKey::generate(uint32(*kept_height, "kept height")? as usize)
-                    .map_err(api_error)
+            SphincsKeySource::Random => Ok(sphincs::SecretKey::generate()),
+            SphincsKeySource::Seed(seed) => {
+                Ok(sphincs::SecretKey::from_seed(bytes32(seed, "seed")?))
             }
-            SphincsKeySource::Seed(seed, kept_height) => sphincs::SecretKey::from_seed(
-                bytes32(seed, "seed")?,
-                uint32(*kept_height, "kept height")? as usize,
-            )
-            .map_err(api_error),
             SphincsKeySource::Bytes(bytes) => {
                 sphincs::SecretKey::from_bytes(bytes).map_err(api_error)
             }
@@ -418,16 +408,16 @@ pub fn xmss_verify(public_key: Buffer, message: Buffer, signature: Buffer) -> Re
 }
 
 #[napi(ts_return_type = "Promise<SphincsSecretKey>")]
-pub fn generate_sphincs_secret_key(kept_height: f64) -> AsyncTask<SphincsKeyTask> {
+pub fn generate_sphincs_secret_key() -> AsyncTask<SphincsKeyTask> {
     AsyncTask::new(SphincsKeyTask {
-        source: SphincsKeySource::Random(kept_height),
+        source: SphincsKeySource::Random,
     })
 }
 
 #[napi(ts_return_type = "Promise<SphincsSecretKey>")]
-pub fn sphincs_secret_key_from_seed(seed: Buffer, kept_height: f64) -> AsyncTask<SphincsKeyTask> {
+pub fn sphincs_secret_key_from_seed(seed: Buffer) -> AsyncTask<SphincsKeyTask> {
     AsyncTask::new(SphincsKeyTask {
-        source: SphincsKeySource::Seed(seed.to_vec(), kept_height),
+        source: SphincsKeySource::Seed(seed.to_vec()),
     })
 }
 

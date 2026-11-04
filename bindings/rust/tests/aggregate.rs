@@ -6,7 +6,7 @@ use std::sync::LazyLock;
 use lean_pq::{aggregate, sphincs, xmss, Aggregate, Error, Message, MAX_CHILDREN};
 use leanvm::lean_sphincs::LeanSphincsVerifyError;
 use leanvm::lean_xmss::LeanXmssVerifyError;
-use leanvm::{AggregateVerifyError, AggregationError, VerifierError};
+use leanvm::{AggregateVerifyError, AggregationError};
 
 /// Two signers, shared by every test so each key is generated once.
 struct Signers {
@@ -16,7 +16,7 @@ struct Signers {
 
 static SIGNERS: LazyLock<Signers> = LazyLock::new(|| Signers {
     xmss: xmss::SecretKey::from_seed([5; 32]),
-    sphincs: sphincs::SecretKey::from_seed([6; 32], 4).unwrap(),
+    sphincs: sphincs::SecretKey::from_seed([6; 32]),
 });
 
 /// One proven aggregate over a single leanXMSS claim, shared to prove only once.
@@ -128,10 +128,8 @@ fn rejects_empty_input() {
             reason: AggregationError::Empty,
         }
     );
-    assert_eq!(
-        error.to_string(),
-        "aggregation failed: no signature claims or DA roots to publish"
-    );
+    // Bindings match on this prefix; the reason after it is upstream's wording.
+    assert!(error.to_string().starts_with("aggregation failed: "));
 }
 
 #[test]
@@ -151,21 +149,28 @@ fn rejects_tampered_and_truncated_bytes() {
     //     truncated  does not parse as an aggregate
     //
     // Bindings match on the "invalid aggregate: " prefix of the message.
-    let cases = [
-        (
-            tampered.as_slice(),
-            AggregateVerifyError::Snark(VerifierError::MerkleRootMismatch),
-            "invalid aggregate: the snark did not verify: Merkle root mismatch",
-        ),
-        (
-            truncated,
-            AggregateVerifyError::MalformedEncoding,
-            "invalid aggregate: not a valid aggregate encoding",
-        ),
-    ];
-    for (bytes, reason, message) in cases {
-        let error = Aggregate::from_bytes(bytes).unwrap_err();
-        assert_eq!(error, Error::InvalidAggregate { reason });
-        assert_eq!(error.to_string(), message);
-    }
+    let tampered_error = Aggregate::from_bytes(&tampered).unwrap_err();
+    // The snark's own reason is opaque upstream; its message names the step.
+    assert!(matches!(
+        tampered_error,
+        Error::InvalidAggregate {
+            reason: AggregateVerifyError::Snark(_)
+        }
+    ));
+    assert_eq!(
+        tampered_error.to_string(),
+        "invalid aggregate: the snark did not verify: Merkle root mismatch"
+    );
+
+    let truncated_error = Aggregate::from_bytes(truncated).unwrap_err();
+    assert_eq!(
+        truncated_error,
+        Error::InvalidAggregate {
+            reason: AggregateVerifyError::MalformedEncoding
+        }
+    );
+    assert_eq!(
+        truncated_error.to_string(),
+        "invalid aggregate: not a valid aggregate encoding"
+    );
 }

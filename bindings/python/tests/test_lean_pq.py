@@ -16,8 +16,9 @@ def test_xmss_signs_and_verifies():
 
 
 def test_sphincs_signs_and_verifies():
-    key = lpq.SphincsSecretKey.from_seed(b"\x02" * 32, 4)
+    key = lpq.SphincsSecretKey.from_seed(b"\x02" * 32)
     signature = key.sign(MESSAGE)
+    assert len(signature) == 7740
 
     assert lpq.sphincs_verify(key.public_key, MESSAGE, signature) is None
     with pytest.raises(lpq.LeanPqError):
@@ -30,10 +31,10 @@ def test_secret_keys_round_trip_through_bytes():
     assert restored_xmss.public_key == xmss_key.public_key
     lpq.xmss_verify(xmss_key.public_key, MESSAGE, restored_xmss.sign(MESSAGE, 9))
 
-    sphincs_key = lpq.SphincsSecretKey.from_seed(b"\x04" * 32, 3)
+    sphincs_key = lpq.SphincsSecretKey.from_seed(b"\x04" * 32)
+    assert len(sphincs_key.to_bytes()) == 32
     restored_sphincs = lpq.SphincsSecretKey.from_bytes(sphincs_key.to_bytes())
     assert restored_sphincs.public_key == sphincs_key.public_key
-    assert restored_sphincs.kept_height == 3
     lpq.sphincs_verify(sphincs_key.public_key, MESSAGE, restored_sphincs.sign(MESSAGE))
 
 
@@ -42,7 +43,7 @@ def test_aggregates_both_schemes_recursively():
     first = b"\x11" * 32
     second = b"\x22" * 32
     xmss_key = lpq.XmssSecretKey.from_seed(b"\x05" * 32)
-    sphincs_key = lpq.SphincsSecretKey.from_seed(b"\x06" * 32, 4)
+    sphincs_key = lpq.SphincsSecretKey.from_seed(b"\x06" * 32)
 
     left = lpq.aggregate(
         xmss=[(xmss_key.public_key, first, xmss_key.sign(first, 0))]

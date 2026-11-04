@@ -9,7 +9,7 @@ facade `lean-pq`:
   message. Aggregates can be combined into larger aggregates.
 
 Public keys and messages are 32 bytes. Signatures are plain fixed-length
-`bytes` (2404 for leanXMSS, 4276 for leanSPHINCS). Errors raise
+`bytes` (2404 for leanXMSS, 7740 for leanSPHINCS). Errors raise
 `LeanPqError`; a seed, message, public key, or signature of the wrong length
 raises `ValueError`. Key generation, signing, verification, aggregation, and
 aggregate decoding release the GIL.
@@ -54,16 +54,16 @@ before publishing a signature.
 
 ## leanSPHINCS
 
-A key keeps one subtree of height `kept_height` (at most 26), trading signing
-capacity for key generation time.
+A key is its 32-byte seed and signs at most `2^30` messages. Signing is
+deterministic.
 
 ```python
-key = lpq.SphincsSecretKey.from_seed(b"\x02" * 32, 4)  # or SphincsSecretKey.generate(4)
+key = lpq.SphincsSecretKey.from_seed(b"\x02" * 32)  # or SphincsSecretKey.generate()
 signature = key.sign(message)
 lpq.sphincs_verify(key.public_key, message, signature)
 
 restored = lpq.SphincsSecretKey.from_bytes(key.to_bytes())
-assert restored.kept_height == 4
+assert restored.public_key == key.public_key
 ```
 
 ## Aggregation
@@ -74,7 +74,7 @@ union of its inputs' claims. Raw signatures are verified before proving.
 
 ```python
 xmss_key = lpq.XmssSecretKey.from_seed(b"\x05" * 32)
-sphincs_key = lpq.SphincsSecretKey.from_seed(b"\x06" * 32, 4)
+sphincs_key = lpq.SphincsSecretKey.from_seed(b"\x06" * 32)
 first, second = b"\x11" * 32, b"\x22" * 32
 
 left = lpq.aggregate(xmss=[(xmss_key.public_key, first, xmss_key.sign(first, 0))])

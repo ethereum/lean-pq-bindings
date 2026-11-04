@@ -5,10 +5,9 @@ and their zkVM-backed recursive aggregation:
 
 - **leanXMSS**: stateful. A key signs at `2^32` leaf indices; never sign two different messages
   at the same leaf index.
-- **leanSPHINCS**: stateless. A key keeps one subtree of height `kept_height` (at most 26), which
-  trades signing capacity for key generation time.
+- **leanSPHINCS**: stateless. A key signs at most `2^30` messages; signing is deterministic.
 
-Public keys and messages are `[32]u8`; signatures are `[2404]u8` (leanXMSS) and `[4276]u8`
+Public keys and messages are `[32]u8`; signatures are `[2404]u8` (leanXMSS) and `[7740]u8`
 (leanSPHINCS). `XmssSecretKey`, `SphincsSecretKey`, and `Aggregate` own native handles: call
 `deinit` exactly once on each. Slices returned by `Aggregate.toBytes`, `xmssClaims`, and
 `sphincsClaims` belong to the caller's allocator.
@@ -79,7 +78,7 @@ pub fn main() !void {
     const xmss_signature = try xmss_key.sign(message, 7);
     try lpq.xmssVerify(try xmss_key.publicKey(), message, &xmss_signature);
 
-    var sphincs_key = try lpq.SphincsSecretKey.fromSeed([_]u8{0x02} ** 32, 4);
+    var sphincs_key = try lpq.SphincsSecretKey.fromSeed([_]u8{0x02} ** 32);
     defer sphincs_key.deinit();
     const sphincs_signature = try sphincs_key.sign(message);
     try lpq.sphincsVerify(try sphincs_key.publicKey(), message, &sphincs_signature);
@@ -112,7 +111,7 @@ Verification failures return `error.InvalidSignature`; other native errors retur
 
 leanXMSS keys are stateful: persist your own durable high-water leaf index alongside
 `XmssSecretKey.toBytes()` and advance it before publishing a signature. Secret key bytes are secret
-material: the leanXMSS seed, or the leanSPHINCS seed followed by its kept height.
+material: the leanXMSS or leanSPHINCS seed.
 
 `Aggregate.create` verifies every raw signature before proving and runs one proof at a time per
 process; one aggregation takes seconds and about 1.6 GB of memory. `Aggregate.fromBytes` verifies

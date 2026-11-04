@@ -11,7 +11,7 @@ use std::sync::{Mutex, Once, PoisonError};
 
 use leanvm::lean_sphincs::verify as verify_sphincs;
 use leanvm::lean_xmss::verify as verify_xmss;
-use leanvm::{aggregate as prove, setup_prover, EthereumProof, MAX_RECURSIONS};
+use leanvm::{aggregate as prove, setup as setup_leanvm, EthereumProof, MAX_RECURSIONS};
 
 use crate::{sphincs, xmss, Error, Message};
 
@@ -37,7 +37,7 @@ static SETUP: Once = Once::new();
 ///
 /// Aggregating and decoding call it themselves, so calling it only moves that cost earlier.
 pub fn setup() {
-    SETUP.call_once(setup_prover);
+    SETUP.call_once(setup_leanvm);
 }
 
 /// A verified recursive proof that each listed public key signed its message.

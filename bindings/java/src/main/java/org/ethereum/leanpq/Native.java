@@ -28,7 +28,7 @@ final class Native {
     static final int MESSAGE_LENGTH = 32;
     static final int SEED_LENGTH = 32;
     static final int XMSS_SIGNATURE_LENGTH = 2404;
-    static final int SPHINCS_SIGNATURE_LENGTH = 4276;
+    static final int SPHINCS_SIGNATURE_LENGTH = 7740;
 
     private static final int OK = 0;
     private static final int CHECKED_ERROR = 1;
@@ -58,12 +58,11 @@ final class Native {
     private static final MethodHandle XMSS_DESTROY = downcall("lpq_xmss_secret_key_destroy", DESTROY);
     private static final MethodHandle XMSS_VERIFY = downcall("lpq_xmss_verify", VERIFY);
 
-    private static final MethodHandle SPHINCS_GENERATE = downcall("lpq_sphincs_secret_key_generate", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
-    private static final MethodHandle SPHINCS_FROM_SEED = downcall("lpq_sphincs_secret_key_from_seed", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, SIZE, ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle SPHINCS_GENERATE = downcall("lpq_sphincs_secret_key_generate", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+    private static final MethodHandle SPHINCS_FROM_SEED = downcall("lpq_sphincs_secret_key_from_seed", BYTES_TO_HANDLE);
     private static final MethodHandle SPHINCS_FROM_BYTES = downcall("lpq_sphincs_secret_key_from_bytes", BYTES_TO_HANDLE);
     private static final MethodHandle SPHINCS_TO_BYTES = downcall("lpq_sphincs_secret_key_to_bytes", HANDLE_TO_BUFFER);
     private static final MethodHandle SPHINCS_PUBLIC_KEY = downcall("lpq_sphincs_secret_key_public_key", HANDLE_TO_BUFFER);
-    private static final MethodHandle SPHINCS_KEPT_HEIGHT = downcall("lpq_sphincs_secret_key_kept_height", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
     private static final MethodHandle SPHINCS_SIGN = downcall("lpq_sphincs_secret_key_sign", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, SIZE, ValueLayout.ADDRESS));
     private static final MethodHandle SPHINCS_DESTROY = downcall("lpq_sphincs_secret_key_destroy", DESTROY);
     private static final MethodHandle SPHINCS_VERIFY = downcall("lpq_sphincs_verify", VERIFY);
@@ -127,14 +126,13 @@ final class Native {
         invoke(XMSS_DESTROY, pointer);
     }
 
-    static MemorySegment sphincsGenerate(int keptHeight) {
-        return handle(SPHINCS_GENERATE, keptHeight(keptHeight));
+    static MemorySegment sphincsGenerate() {
+        return handle(SPHINCS_GENERATE);
     }
 
-    static MemorySegment sphincsFromSeed(byte[] seed, int keptHeight) {
-        int height = keptHeight(keptHeight);
+    static MemorySegment sphincsFromSeed(byte[] seed) {
         try (Arena arena = Arena.ofConfined()) {
-            return handle(SPHINCS_FROM_SEED, copy(arena, seed), (long) seed.length, height);
+            return handle(SPHINCS_FROM_SEED, copy(arena, seed), (long) seed.length);
         }
     }
 
@@ -150,14 +148,6 @@ final class Native {
 
     static byte[] sphincsPublicKey(MemorySegment key) {
         return buffer(SPHINCS_PUBLIC_KEY, key);
-    }
-
-    static int sphincsKeptHeight(MemorySegment key) {
-        try (Arena arena = Arena.ofConfined()) {
-            MemorySegment out = arena.allocate(ValueLayout.JAVA_INT);
-            check(status(SPHINCS_KEPT_HEIGHT, key, out));
-            return out.get(ValueLayout.JAVA_INT, 0);
-        }
     }
 
     static byte[] sphincsSign(MemorySegment key, byte[] message) {
@@ -427,12 +417,5 @@ final class Native {
             throw new IllegalArgumentException(name + " must fit an unsigned 32-bit integer");
         }
         return (int) value;
-    }
-
-    private static int keptHeight(int keptHeight) {
-        if (keptHeight < 0) {
-            throw new IllegalArgumentException("keptHeight must not be negative");
-        }
-        return keptHeight;
     }
 }

@@ -37,10 +37,10 @@ jobs:
       - name: Check out the pull request
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
-      - name: Install Rust 1.94.0
+      - name: Install Rust 1.97.0
         uses: dtolnay/rust-toolchain@35d8a35b823d6c20db516f5c35eb0a9640942c17
         with:
-          toolchain: 1.94.0
+          toolchain: 1.97.0
 
       - name: Restore Rust build cache
         uses: Swatinem/rust-cache@401aff9a7a08acb9d27b64936a90db81024cff97
@@ -133,10 +133,10 @@ jobs:
       - name: Check out the pull request
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
-      - name: Install Rust 1.94.0
+      - name: Install Rust 1.97.0
         uses: dtolnay/rust-toolchain@35d8a35b823d6c20db516f5c35eb0a9640942c17
         with:
-          toolchain: 1.94.0
+          toolchain: 1.97.0
 
       - name: Restore Rust build cache
         uses: Swatinem/rust-cache@401aff9a7a08acb9d27b64936a90db81024cff97

@@ -24,11 +24,11 @@
 
 use std::fmt;
 
-use rand::random;
 use signatures::lean_xmss::{
-    key_gen_from_seed, sign as xmss_sign, verify as xmss_verify, LeafIndex as UpstreamLeafIndex,
-    LeanXmssPublicKey, LeanXmssSecretKey, LeanXmssSignature, Seed as UpstreamSeed,
-    LOG_LIFETIME as UPSTREAM_LOG_LIFETIME, PUB_KEY_SIZE, SEED_LEN as UPSTREAM_SEED_LEN, SIG_SIZE,
+    key_gen, key_gen_from_seed, sign as xmss_sign, verify as xmss_verify,
+    LeafIndex as UpstreamLeafIndex, LeanXmssPublicKey, LeanXmssSecretKey, LeanXmssSignature,
+    Seed as UpstreamSeed, LOG_LIFETIME as UPSTREAM_LOG_LIFETIME, PUB_KEY_SIZE,
+    SEED_LEN as UPSTREAM_SEED_LEN, SIG_SIZE,
 };
 
 use crate::{Encoding, Error, Message, PUBLIC_KEY_LEN};
@@ -106,7 +106,7 @@ impl PublicKey {
     /// Encodes the key as its root followed by its public parameter.
     #[must_use]
     pub fn to_bytes(&self) -> [u8; PUBLIC_KEY_LEN] {
-        self.0.flatten()
+        self.0.to_bytes()
     }
 
     /// Checks a signature of a message under this key.
@@ -131,18 +131,14 @@ impl PublicKey {
 /// - The key holds no record of used leaf indices: the caller must keep one.
 ///
 /// Its memory is not zeroized on drop.
-pub struct SecretKey {
-    /// The seed every secret derives from, kept so the key can be encoded.
-    seed: Seed,
-    /// The expanded key: top tree and cached bottom tree.
-    inner: LeanXmssSecretKey,
-}
+pub struct SecretKey(LeanXmssSecretKey);
 
 impl SecretKey {
     /// Generates a key from the operating system's randomness.
     #[must_use]
     pub fn generate() -> Self {
-        Self::from_seed(random())
+        // Key generation also returns the public key, which the expanded key already holds.
+        Self(key_gen().0)
     }
 
     /// Derives a key from its seed, deterministically.
@@ -150,9 +146,7 @@ impl SecretKey {
     /// The seed is the whole secret: never derive a second key from it.
     #[must_use]
     pub fn from_seed(seed: Seed) -> Self {
-        // Key generation also returns the public key, which the expanded key already holds.
-        let (inner, _) = key_gen_from_seed(seed);
-        Self { seed, inner }
+        Self(key_gen_from_seed(seed).0)
     }
 
     /// Decodes a key from its 32-byte seed.
@@ -175,13 +169,13 @@ impl SecretKey {
     /// The bytes are secret key material.
     #[must_use]
     pub fn to_bytes(&self) -> [u8; SECRET_KEY_LEN] {
-        self.seed
+        self.0.to_bytes()
     }
 
     /// Returns the key's public key.
     #[must_use]
     pub fn public_key(&self) -> PublicKey {
-        PublicKey(self.inner.public_key())
+        PublicKey(self.0.public_key())
     }
 
     /// Builds the bottom tree holding a leaf index, ahead of signing there.
@@ -192,7 +186,7 @@ impl SecretKey {
     ///
     /// Fails when `2^32` randomizers give no admissible encoding of the bottom root.
     pub fn prepare(&self, leaf_index: LeafIndex) -> Result<(), Error> {
-        self.inner
+        self.0
             .prepare(leaf_index)
             .map_err(|reason| Error::XmssSign { leaf_index, reason })
     }
@@ -205,7 +199,7 @@ impl SecretKey {
     ///
     /// Fails when `2^32` randomizers give no admissible encoding of the message.
     pub fn sign(&self, message: &Message, leaf_index: LeafIndex) -> Result<Signature, Error> {
-        xmss_sign(&self.inner, message, leaf_index)
+        xmss_sign(&self.0, message, leaf_index)
             .map(Signature)
             .map_err(|reason| Error::XmssSign { leaf_index, reason })
     }
@@ -251,7 +245,7 @@ impl Signature {
     /// Returns the leaf index the signature was made at.
     #[must_use]
     pub fn leaf_index(&self) -> LeafIndex {
-        self.0.leaf_index
+        self.0.leaf_index()
     }
 }
 

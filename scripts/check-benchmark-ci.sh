@@ -112,7 +112,7 @@ pr_benchmark_runners=$(grep -Fc 'runs-on: size-attester7870-x64' "$pr_workflow" 
 trusted_pr_jobs=$(grep -Fc 'github.event.pull_request.head.repo.full_name == github.repository' "$pr_workflow" || true)
 [ "$trusted_pr_jobs" -eq 2 ] || fail "$pr_workflow: benchmark jobs must reject fork pull requests"
 reject_text "$pr_workflow" 'runs-on: ubuntu-24\.04' 'GitHub-hosted benchmark runner'
-require_literal "$pr_workflow" 'toolchain: 1.94.0' 'pinned Rust toolchain'
+require_literal "$pr_workflow" 'toolchain: 1.97.0' 'pinned Rust toolchain'
 require_literal "$pr_workflow" 'runner_image_os=${ImageOS:-unknown}' 'runner image OS metadata'
 require_literal "$pr_workflow" 'runner_image_version=${ImageVersion:-unknown}' 'runner image version metadata'
 measured_at_entries=$(grep -Fc 'echo "measured_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"' "$pr_workflow")

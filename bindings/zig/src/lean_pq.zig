@@ -1,10 +1,9 @@
 //! Safe Zig bindings for leanVM's post-quantum signatures and their recursive aggregation.
 //!
 //! leanXMSS is stateful: a key signs at `2^32` leaf indices, and must never sign two different
-//! messages at the same leaf index. leanSPHINCS is stateless: a key keeps one subtree of height
-//! `kept_height` (at most `max_kept_height`). Public keys and messages are 32 bytes; signatures
-//! are fixed-size byte arrays. Secret keys and aggregates own native handles: call `deinit`
-//! exactly once on each.
+//! messages at the same leaf index. leanSPHINCS is stateless: a key signs at most `2^30` messages.
+//! Public keys and messages are 32 bytes; signatures are fixed-size byte arrays. Secret keys and
+//! aggregates own native handles: call `deinit` exactly once on each.
 const std = @import("std");
 
 const c = @cImport({
@@ -16,9 +15,8 @@ pub const public_key_len = 32;
 pub const seed_len = 32;
 pub const xmss_secret_key_len = 32;
 pub const xmss_signature_len = 2404;
-pub const sphincs_secret_key_len = 33;
-pub const sphincs_signature_len = 4276;
-pub const max_kept_height = 26;
+pub const sphincs_secret_key_len = 32;
+pub const sphincs_signature_len = 7740;
 /// The most child aggregates one `Aggregate.create` call accepts.
 pub const max_children = 16;
 
@@ -62,7 +60,7 @@ pub const Claim = extern struct {
 
 comptime {
     std.debug.assert(@sizeOf(XmssSignedMessage) == 2468);
-    std.debug.assert(@sizeOf(SphincsSignedMessage) == 4340);
+    std.debug.assert(@sizeOf(SphincsSignedMessage) == 7804);
     std.debug.assert(@sizeOf(Claim) == 64);
 }
 
@@ -139,16 +137,16 @@ pub const SphincsSecretKey = struct {
     handle: *c.lpq_sphincs_secret_key,
 
     /// A fresh key from the operating system's randomness.
-    pub fn generate(kept_height: u32) Error!SphincsSecretKey {
+    pub fn generate() Error!SphincsSecretKey {
         var output: ?*c.lpq_sphincs_secret_key = null;
-        try checkStatus(c.lpq_sphincs_secret_key_generate(kept_height, &output));
+        try checkStatus(c.lpq_sphincs_secret_key_generate(&output));
         return .{ .handle = output orelse return error.InvalidNativeEncoding };
     }
 
-    /// The seed is the key's secret material: never derive another key from it.
-    pub fn fromSeed(seed: Seed, kept_height: u32) Error!SphincsSecretKey {
+    /// The seed is the key's entire secret material: never derive another key from it.
+    pub fn fromSeed(seed: Seed) Error!SphincsSecretKey {
         var output: ?*c.lpq_sphincs_secret_key = null;
-        try checkStatus(c.lpq_sphincs_secret_key_from_seed(&seed, seed.len, kept_height, &output));
+        try checkStatus(c.lpq_sphincs_secret_key_from_seed(&seed, seed.len, &output));
         return .{ .handle = output orelse return error.InvalidNativeEncoding };
     }
 
@@ -163,7 +161,7 @@ pub const SphincsSecretKey = struct {
         self.* = undefined;
     }
 
-    /// SECRET KEY MATERIAL: the seed, then the kept height.
+    /// SECRET KEY MATERIAL: the seed.
     pub fn toBytes(self: *const SphincsSecretKey) Error![sphincs_secret_key_len]u8 {
         var output: c.lpq_buffer = .{ .data = null, .len = 0 };
         try checkStatus(c.lpq_sphincs_secret_key_to_bytes(self.handle, &output));
@@ -174,12 +172,6 @@ pub const SphincsSecretKey = struct {
         var output: c.lpq_buffer = .{ .data = null, .len = 0 };
         try checkStatus(c.lpq_sphincs_secret_key_public_key(self.handle, &output));
         return takeFixed(public_key_len, output);
-    }
-
-    pub fn keptHeight(self: *const SphincsSecretKey) Error!u32 {
-        var output: u32 = undefined;
-        try checkStatus(c.lpq_sphincs_secret_key_kept_height(self.handle, &output));
-        return output;
     }
 
     pub fn sign(self: *const SphincsSecretKey, message: Message) Error!SphincsSignature {

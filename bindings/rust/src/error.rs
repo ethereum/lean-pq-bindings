@@ -28,15 +28,6 @@ pub enum Error {
         actual: usize,
     },
 
-    /// A leanSPHINCS kept height is taller than the tree.
-    #[error("leanSPHINCS kept height {kept_height} exceeds the maximum {max}")]
-    KeptHeightTooLarge {
-        /// The requested kept height.
-        kept_height: usize,
-        /// The tallest kept height, the full tree's height.
-        max: usize,
-    },
-
     /// leanXMSS signing exhausted its randomizer trials without an admissible encoding.
     #[error("leanXMSS signing at leaf index {leaf_index} failed: {reason}")]
     XmssSign {
@@ -55,7 +46,7 @@ pub enum Error {
         reason: LeanXmssVerifyError,
     },
 
-    /// leanSPHINCS signing exhausted its randomizer or encoding-counter trials.
+    /// leanSPHINCS signing exhausted its encoding-counter trials.
     #[error("leanSPHINCS signing failed: {reason}")]
     SphincsSign {
         /// The upstream failure.
@@ -134,9 +125,9 @@ pub enum Encoding {
     XmssSignature,
     /// A 32-byte leanSPHINCS public key.
     SphincsPublicKey,
-    /// A 33-byte leanSPHINCS secret key, its seed then its kept height.
+    /// A 32-byte leanSPHINCS secret key, its seed.
     SphincsSecretKey,
-    /// A 4276-byte leanSPHINCS signature.
+    /// A 7740-byte leanSPHINCS signature.
     SphincsSignature,
 }
 

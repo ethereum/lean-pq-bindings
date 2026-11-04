@@ -98,7 +98,7 @@ func main() {
         log.Fatal(err)
     }
 
-    sphincsKey, err := leanpq.SphincsSecretKeyFromSeed([32]byte{0x02}, 4)
+    sphincsKey, err := leanpq.SphincsSecretKeyFromSeed([32]byte{0x02})
     if err != nil {
         log.Fatal(err)
     }
@@ -146,7 +146,8 @@ func main() {
 
 leanXMSS keys are stateful: persist your own durable high-water leaf index alongside
 `XmssSecretKey.Bytes()` and never sign two different messages at the same leaf index. leanSPHINCS
-keys are stateless; `keptHeight` (at most 26) trades signing capacity for key generation time.
+keys are stateless and deterministic: `SphincsSecretKey.Bytes()` is the 32-byte seed, and a key
+signs at most 2^30 messages.
 
 An aggregate attests the claims it lists, not the claims you wanted: compare `XmssClaims()` and
 `SphincsClaims()` against what you expect. `AggregateSignatures` verifies every raw signature before

@@ -18,7 +18,6 @@ aggregation = ["dep:leanvm"]
 
 [dependencies]
 leanvm = { workspace = true, optional = true }
-rand = { workspace = true }
 signatures = { workspace = true }
 thiserror = "2.0.21"
 

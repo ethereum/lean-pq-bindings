@@ -257,12 +257,14 @@ pub unsafe extern "C" fn lpq_xmss_verify(
 
 #[no_mangle]
 pub unsafe extern "C" fn lpq_sphincs_secret_key_generate(
-    kept_height: u32,
     out: *mut *mut SphincsSecretKeyHandle,
 ) -> c_int {
     ffi(|| {
-        let key = sphincs::SecretKey::generate(kept_height as usize).map_err(|e| e.to_string())?;
-        put_handle(out, SphincsSecretKeyHandle(key), "secret-key")
+        put_handle(
+            out,
+            SphincsSecretKeyHandle(sphincs::SecretKey::generate()),
+            "secret-key",
+        )
     })
 }
 
@@ -270,14 +272,15 @@ pub unsafe extern "C" fn lpq_sphincs_secret_key_generate(
 pub unsafe extern "C" fn lpq_sphincs_secret_key_from_seed(
     seed: *const u8,
     seed_len: usize,
-    kept_height: u32,
     out: *mut *mut SphincsSecretKeyHandle,
 ) -> c_int {
     ffi(|| {
         let seed = bytes32(seed, seed_len, "seed")?;
-        let key =
-            sphincs::SecretKey::from_seed(seed, kept_height as usize).map_err(|e| e.to_string())?;
-        put_handle(out, SphincsSecretKeyHandle(key), "secret-key")
+        put_handle(
+            out,
+            SphincsSecretKeyHandle(sphincs::SecretKey::from_seed(seed)),
+            "secret-key",
+        )
     })
 }
 
@@ -310,21 +313,6 @@ pub unsafe extern "C" fn lpq_sphincs_secret_key_public_key(
     ffi(|| {
         let public_key = handle(key, "secret-key")?.0.public_key().to_bytes();
         put_buffer(out, public_key.to_vec())
-    })
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn lpq_sphincs_secret_key_kept_height(
-    key: *mut SphincsSecretKeyHandle,
-    out: *mut u32,
-) -> c_int {
-    ffi(|| {
-        let kept_height = handle(key, "secret-key")?.0.kept_height();
-        let out = out
-            .as_mut()
-            .ok_or_else(|| "kept-height output pointer must not be null".to_owned())?;
-        *out = u32::try_from(kept_height).map_err(|_| "kept height exceeds u32".to_owned())?;
-        Ok(())
     })
 }
 

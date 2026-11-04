@@ -75,7 +75,7 @@ public final class Main {
         byte[] message = filled(0x42);
         byte[] other = filled(0x43);
         try (XmssSecretKey xmss = XmssSecretKey.fromSeed(filled(1));
-             SphincsSecretKey sphincs = SphincsSecretKey.fromSeed(filled(2), 4)) {
+             SphincsSecretKey sphincs = SphincsSecretKey.fromSeed(filled(2))) {
             byte[] xmssSignature = xmss.sign(message, 0);
             check(LeanPq.xmssVerify(xmss.publicKey(), message, xmssSignature), "leanXMSS signature must verify");
             check(!LeanPq.xmssVerify(xmss.publicKey(), other, xmssSignature), "leanXMSS signature must not verify another message");

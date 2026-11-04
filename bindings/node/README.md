@@ -6,11 +6,11 @@ over the safe `lean-pq` Rust crate; they do not use the repository's C bridge.
 
 - **leanXMSS** is stateful: a key signs at `2^32` leaf indices; never sign two different messages
   at the same leaf index.
-- **leanSPHINCS** is stateless: a key keeps one subtree of height `keptHeight` (at most 26),
-  trading signing capacity for key generation time.
+- **leanSPHINCS** is stateless: a key signs at most `2^30` messages, and signing is
+  deterministic.
 
 Public keys and messages are 32-byte `Buffer`s; signatures are `Buffer`s of 2404 (leanXMSS) or
-4276 (leanSPHINCS) bytes. Key generation, preparation, signing, setup, aggregation, and aggregate
+7740 (leanSPHINCS) bytes. Key generation, preparation, signing, setup, aggregation, and aggregate
 decoding return Promises so their native work does not block the JavaScript event loop.
 
 ## Install
@@ -49,15 +49,15 @@ const xmssKey = await lpq.XmssSecretKey.fromSeed(Buffer.alloc(32, 1))
 const xmssSignature = await xmssKey.sign(message, 7)
 lpq.xmssVerify(xmssKey.publicKey, message, xmssSignature) // throws if invalid
 
-const sphincsKey = await lpq.SphincsSecretKey.fromSeed(Buffer.alloc(32, 2), 4)
+const sphincsKey = await lpq.SphincsSecretKey.fromSeed(Buffer.alloc(32, 2))
 const sphincsSignature = await sphincsKey.sign(message)
 lpq.sphincsVerify(sphincsKey.publicKey, message, sphincsSignature)
 ```
 
 Persist your own durable high-water leaf index alongside a leanXMSS key's `toBytes()` and advance
-it before publishing a signature. `toBytes()` is secret material: the leanXMSS seed, or the
-leanSPHINCS seed followed by its kept height. `XmssSecretKey.prepare(leafIndex)` builds the bottom
-tree a leaf index falls in ahead of signing there.
+it before publishing a signature. `toBytes()` is secret material: the key's 32-byte seed.
+`XmssSecretKey.prepare(leafIndex)` builds the bottom tree a leaf index falls in ahead of signing
+there.
 
 ## Aggregation
 

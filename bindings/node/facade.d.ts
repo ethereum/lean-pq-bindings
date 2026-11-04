@@ -35,17 +35,16 @@ export declare class XmssSecretKey {
 /** Throws if `signature` is not a valid leanXMSS signature of `message` under `publicKey`. */
 export declare function xmssVerify(publicKey: Buffer, message: Buffer, signature: Buffer): void
 
-/** A stateless leanSPHINCS secret key keeping one subtree of height `keptHeight` (at most 26). */
+/** A stateless leanSPHINCS secret key. It signs at most `2^30` messages, deterministically. */
 export declare class SphincsSecretKey {
   private constructor()
-  static generate(keptHeight: number): Promise<SphincsSecretKey>
-  static fromSeed(seed: Buffer, keptHeight: number): Promise<SphincsSecretKey>
+  static generate(): Promise<SphincsSecretKey>
+  static fromSeed(seed: Buffer): Promise<SphincsSecretKey>
   static fromBytes(data: Buffer): Promise<SphincsSecretKey>
-  /** SECRET KEY MATERIAL: the 32-byte seed, then the kept height. */
+  /** SECRET KEY MATERIAL: the 32-byte seed. */
   toBytes(): Buffer
   get publicKey(): Buffer
-  get keptHeight(): number
-  /** Resolves to a 4276-byte signature. */
+  /** Resolves to a 7740-byte signature. */
   sign(message: Buffer): Promise<Buffer>
 }
 
