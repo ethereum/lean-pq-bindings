@@ -26,10 +26,10 @@ pub fn build(b: *std.Build) void {
     } else if (target.result.os.tag == .macos) {
         lean_pq.linkFramework("Foundation", .{});
     } else if (target.result.os.tag == .windows) {
-        // The Rust standard library's imports (`--print native-static-libs`), its unwinder, and
-        // `synchronization` for WaitOnAddress/WakeByAddress*, which the archive's own import stubs
-        // do not always satisfy at link time.
-        for ([_][]const u8{ "kernel32", "ntdll", "userenv", "ws2_32", "dbghelp", "synchronization", "unwind" }) |name| {
+        // The Rust standard library's imports (`--print native-static-libs`), its unwinder, and the
+        // API set that exports WaitOnAddress/WakeByAddress*, which the archive's own import stubs do
+        // not always satisfy at link time. Zig's Windows distribution has no `synchronization.def`.
+        for ([_][]const u8{ "kernel32", "ntdll", "userenv", "ws2_32", "dbghelp", "api-ms-win-core-synch-l1-2-0", "unwind" }) |name| {
             lean_pq.linkSystemLibrary(name, .{});
         }
     }
