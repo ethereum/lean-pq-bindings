@@ -26,8 +26,10 @@ pub fn build(b: *std.Build) void {
     } else if (target.result.os.tag == .macos) {
         lean_pq.linkFramework("Foundation", .{});
     } else if (target.result.os.tag == .windows) {
-        // The Rust standard library's imports (`--print native-static-libs`) and its unwinder.
-        for ([_][]const u8{ "kernel32", "ntdll", "userenv", "ws2_32", "dbghelp", "unwind" }) |name| {
+        // The Rust standard library's imports (`--print native-static-libs`), its unwinder, and
+        // `synchronization` for WaitOnAddress/WakeByAddress*, which the archive's own import stubs
+        // do not always satisfy at link time.
+        for ([_][]const u8{ "kernel32", "ntdll", "userenv", "ws2_32", "dbghelp", "synchronization", "unwind" }) |name| {
             lean_pq.linkSystemLibrary(name, .{});
         }
     }
