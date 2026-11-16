@@ -17,7 +17,8 @@ pub const MESSAGE_LEN: usize = 32;
 
 /// Byte length of a public key in both schemes.
 ///
-/// A key is a 16-byte Merkle root followed by its 16-byte public parameter.
+/// Both keys are a 16-byte Merkle root and a 16-byte public parameter, in each scheme's own
+/// order: leanXMSS encodes the root first, leanSPHINCS its `PK.seed` first, as FIPS 205 does.
 pub const PUBLIC_KEY_LEN: usize = 32;
 
 /// A message both schemes sign.

@@ -22,4 +22,4 @@ assert_file_contains native_darwin.go 'internal/native/darwin_universal'
 
 assert_file_contains native_windows_amd64.go '//go:build cgo && windows && amd64'
 assert_file_contains native_windows_amd64.go 'internal/native/windows_amd64'
-assert_file_contains native_windows_amd64.go '-lntdll -luserenv -lws2_32 -ldbghelp'
+assert_file_contains native_windows_amd64.go '-lntdll -luserenv -lws2_32 -ldbghelp -lsynchronization'

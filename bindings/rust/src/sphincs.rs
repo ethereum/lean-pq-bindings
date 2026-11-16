@@ -1,6 +1,7 @@
 //! leanSPHINCS: a stateless hash-based signature.
 //!
-//! Normative source: the leanSPHINCS specification in leanVM's `crates/signatures`.
+//! Normative source: the leanSPHINCS specification in leanVM's `crates/signatures`, which
+//! follows the layout of FIPS 205 (SLH-DSA) with Keccak-256 as the hash.
 //!
 //! ```text
 //!     hash         Keccak-256, truncated to n = 16 bytes
@@ -9,7 +10,7 @@
 //!     hypertree    three layers of WOTS+C trees, heights 8, 8 and 10 from the bottom,
 //!                  sign the FORS key up to the public key
 //!     lifetime     at most 2^30 messages per key
-//!     verify       492 Keccak permutations
+//!     verify       515 Keccak permutations
 //! ```
 //!
 //! The message digest picks the FORS instance and its leaves, so no state is kept between
@@ -29,7 +30,7 @@ use signatures::lean_sphincs::{
 
 use crate::{Encoding, Error, Message, PUBLIC_KEY_LEN};
 
-/// Byte length of a seed, which derives the public parameter and every secret.
+/// Byte length of a seed, which derives `PK.seed`, `SK.prf` and every secret.
 pub const SEED_LEN: usize = 32;
 
 /// Byte length of an encoded secret key, which is its seed.
@@ -56,7 +57,8 @@ const _: () = assert!(SIGNATURE_LEN == SIG_SIZE);
 const _: () = assert!(PUBLIC_KEY_LEN == PUB_KEY_SIZE);
 const _: fn(UpstreamSeed) -> Seed = |seed| seed;
 
-/// A leanSPHINCS public key: a Merkle root and its public parameter.
+/// A leanSPHINCS public key: `PK.seed`, the public parameter every hash is keyed with, and
+/// `PK.root`, the root of the top tree.
 ///
 /// Keys order by their encoded bytes, the order aggregate claims are sorted in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -80,7 +82,7 @@ impl PublicKey {
         Ok(Self(LeanSphincsPublicKey::from_bytes(array)))
     }
 
-    /// Encodes the key as its root followed by its public parameter.
+    /// Encodes the key as `PK.seed` followed by `PK.root`, the order of FIPS 205.
     #[must_use]
     pub fn to_bytes(&self) -> [u8; PUBLIC_KEY_LEN] {
         self.0.to_bytes()
