@@ -36,7 +36,7 @@ jobs:
             target: x86_64
           - runner: ubuntu-latest
             target: aarch64
-          - runner: macos-14
+          - runner: macos-15
             target: aarch64
           # x86_64-pc-windows-msvc; .cargo/config.toml links the C runtime statically.
           - runner: windows-latest
@@ -203,7 +203,7 @@ jobs:
             rust_targets: aarch64-unknown-linux-gnu
             target: aarch64-unknown-linux-gnu
             bundle_dir: aarch64-linux-gnu
-          - runner: macos-14
+          - runner: macos-15
             rust_targets: x86_64-apple-darwin aarch64-apple-darwin
             target: universal2-apple-darwin
             bundle_dir: universal-macos
@@ -338,7 +338,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-latest, ubuntu-24.04-arm, macos-14, windows-latest]
+        runner: [ubuntu-latest, ubuntu-24.04-arm, macos-15, windows-latest]
     runs-on: ${{ matrix.runner }}
     defaults:
       run:
@@ -420,9 +420,9 @@ jobs:
           - runner: ubuntu-latest
             target: aarch64-unknown-linux-musl
             build_args: --cross-compile
-          - runner: macos-14
+          - runner: macos-15
             target: x86_64-apple-darwin
-          - runner: macos-14
+          - runner: macos-15
             target: aarch64-apple-darwin
           # cargo-xwin links against the MSVC CRT and Windows SDK; .cargo/config.toml links the C
           # runtime statically.
@@ -578,7 +578,7 @@ jobs:
             container: node:22-alpine
           - runner: macos-15-intel
             package: darwin-x64
-          - runner: macos-14
+          - runner: macos-15
             package: darwin-arm64
           - runner: windows-latest
             package: win32-x64-msvc
@@ -685,7 +685,7 @@ jobs:
             runner: ubuntu-24.04-arm
             rust_targets: aarch64-unknown-linux-gnu
           - name: macos-universal
-            runner: macos-14
+            runner: macos-15
             rust_targets: x86_64-apple-darwin aarch64-apple-darwin
           - name: windows-x86_64
             runner: windows-latest
