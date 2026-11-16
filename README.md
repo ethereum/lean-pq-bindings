@@ -17,6 +17,7 @@ at `X.Y.Z`. Prebuilt packages need no Rust toolchain.
 | [Java](bindings/java/README.md) 25 | `io.github.crate-crypto:lean-pq` on Maven Central | Linux x86_64/aarch64 (glibc 2.17+), macOS x86_64/arm64, Windows x86_64 |
 | [Go](bindings/go/README.md) ≥ 1.24 | `github.com/ethereum/lean-pq-bindings/bindings/go` | Linux amd64/arm64 (glibc), macOS amd64/arm64, Windows amd64 |
 | [Zig](bindings/zig/README.md) ≥ 0.16 | package attached to each GitHub release | Linux x86_64/aarch64 (glibc), macOS x86_64/aarch64, Windows x86_64 |
+| [Nim](bindings/nim/README.md) ≥ 2.2.12 | Nimble package `lean_pq` at tag `bindings/nim/vX.Y.Z` | Linux x86_64/aarch64 (glibc), macOS x86_64/arm64, Windows x86_64 (MinGW) |
 | [Rust](bindings/rust/README.md) | `lean-pq` from this repository (git) | built from source |
 
 The x86_64 builds require a CPU with AVX2 and PCLMULQDQ.
@@ -95,6 +96,20 @@ exe.root_module.addImport("lean_pq", lean_pq.module("lean_pq"));
 
 On Windows the bundled archive targets Zig's default `x86_64-windows-gnu` ABI.
 
+### Nim
+
+In your `.nimble` file:
+
+<!-- x-release-please-start-version -->
+```nim
+requires "https://github.com/ethereum/lean-pq-bindings#bindings/nim/v0.10.0"
+```
+<!-- x-release-please-end -->
+
+The tag holds the package with its native archives built in, and also works as a
+nimbus-build-system `vendor/` submodule. The bindings are `Result`-based and `raises: []`, and
+build with `--mm:refc` and `--mm:orc`.
+
 ### Rust
 
 The crate is not on crates.io because it depends on leanVM by git revision:
@@ -118,9 +133,10 @@ repository's pinned leanVM revision. Building needs Rust, plus the language tool
 | [Java](bindings/java/README.md) | `gradle -p bindings/java test` | Rust, JDK 25, Gradle 9.1+ |
 | [Go](bindings/go/README.md) | stage the static archive (below), then `go test ./...` in `bindings/go` | Rust, Go 1.24+, cgo, Zig, `cargo-zigbuild` |
 | [Zig](bindings/zig/README.md) | stage the static archive (below), then `zig build test -Dnative-dir=…` in `bindings/zig` | Rust, Zig 0.16+, `cargo-zigbuild` |
+| [Nim](bindings/nim/README.md) | stage the static archive (below) in `bindings/nim/native/<target>`, then `nimble test` in `bindings/nim` | Rust, Nim 2.2.12+, `cargo-zigbuild` |
 | [Rust](bindings/rust/README.md) | `cargo test --release -p lean-pq` | Rust |
 
-Go and Zig link a static archive for the build target. For Linux x86_64:
+Go, Zig and Nim link a static archive for the build target. For Linux x86_64:
 
 ```sh
 rustup target add x86_64-unknown-linux-gnu
@@ -128,13 +144,13 @@ cargo install cargo-zigbuild --locked
 sh bindings/native/scripts/stage-static.sh x86_64-unknown-linux-gnu bindings/go/internal/native/linux_amd64
 ```
 
-Zig takes the same archive's directory as `-Dnative-dir`; the Go README lists the directory for
-each platform.
+Zig takes the same archive's directory as `-Dnative-dir`; the Go and Nim READMEs list the directory
+for each platform.
 
 Each binding uses a language-native wrapper around the Rust implementation. The internal
 [`bindings/native`](bindings/native/README.md) crate supplies a private C-shaped Rust ABI for
-managed wrappers: Java consumes it through the Foreign Function & Memory API, while Go and Zig
-link its static archive. It is not a separate, supported C binding.
+managed wrappers: Java consumes it through the Foreign Function & Memory API, while Go, Zig and
+Nim link its static archive. It is not a separate, supported C binding.
 
 ## Releases
 
