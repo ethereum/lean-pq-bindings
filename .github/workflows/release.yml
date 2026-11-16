@@ -459,8 +459,20 @@ jobs:
         with:
           nim-version: 2.2.12
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      # The images ship Rust under ~/.cargo, and macOS images also put rustup's shims in Homebrew's
+      # bin. Remove both so the consumer builds with no Rust toolchain at all.
       - name: Remove the preinstalled Rust toolchain
-        run: rm -rf "$HOME/.cargo" "$HOME/.rustup"
+        run: |
+          rm -rf "$HOME/.cargo" "$HOME/.rustup"
+          if [ "$RUNNER_OS" = macOS ]; then
+            brew uninstall --ignore-dependencies --force rustup rust 2>/dev/null || true
+          fi
+          for tool in cargo rustc rustup; do
+            while path=$(command -v "$tool"); do
+              echo "removing $path"
+              rm -f "$path"
+            done
+          done
       - name: Build and run a consumer against the package
         run: |
           git clone -q nim-package/nim-package.bundle "$RUNNER_TEMP/nim-package"

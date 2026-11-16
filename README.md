@@ -102,7 +102,7 @@ In your `.nimble` file:
 
 <!-- x-release-please-start-version -->
 ```nim
-requires "https://github.com/ethereum/lean-pq-bindings#bindings/nim/v0.10.0"
+requires "https://github.com/ethereum/lean-pq-bindings#bindings/nim/v0.10.1"
 ```
 <!-- x-release-please-end -->
 
