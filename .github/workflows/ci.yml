@@ -243,6 +243,73 @@ jobs:
           sh bindings/zig/scripts/package.sh 0.0.0 "$RUNNER_TEMP/native" "$RUNNER_TEMP/lean-pq-zig.tar.gz"
           sh bindings/zig/scripts/consumer-smoke.sh "$RUNNER_TEMP/lean-pq-zig.tar.gz"
 
+  nim:
+    name: Nim / ${{ matrix.platform.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: Linux x86_64
+            runner: ubuntu-latest
+            rust_targets: x86_64-unknown-linux-gnu
+            target: x86_64-unknown-linux-gnu
+            bundle_dir: x86_64-linux-gnu
+          - name: macOS universal
+            runner: macos-15
+            rust_targets: x86_64-apple-darwin aarch64-apple-darwin
+            target: universal2-apple-darwin
+            bundle_dir: universal-macos
+    runs-on: ${{ matrix.platform.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools
+
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Install cargo-zigbuild
+        run: cargo install cargo-zigbuild --locked
+
+      - name: Add Rust target support
+        run: rustup target add ${{ matrix.platform.rust_targets }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Stage static native bridge
+        run: |
+          sh bindings/native/scripts/stage-static.sh ${{ matrix.platform.target }} bindings/nim/native/${{ matrix.platform.bundle_dir }}
+          cmp bindings/native/include/lean_pq_native.h bindings/nim/include/lean_pq_native.h
+
+      - uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: 2.2.12
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Builds and runs the tests under --mm:refc and --mm:orc, with the warning and hint checks in
+      # tests/config.nims.
+      - name: Test Nim bindings
+        run: nimble test -y
+        working-directory: bindings/nim
+
+      - name: Package and consume the Nimble package
+        run: |
+          llvm_bin="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/^host: //p')/bin"
+          mkdir -p "$RUNNER_TEMP/native/${{ matrix.platform.bundle_dir }}"
+          cp bindings/nim/native/${{ matrix.platform.bundle_dir }}/liblean_pq_native.a "$RUNNER_TEMP/native/${{ matrix.platform.bundle_dir }}/"
+          LLVM_STRIP="$llvm_bin/llvm-strip" LLVM_AR="$llvm_bin/llvm-ar" \
+            sh bindings/nim/scripts/assemble-package.sh 0.0.0 "$RUNNER_TEMP/native" "$RUNNER_TEMP/nim-package"
+          # The consumer must build without Rust. Drop every PATH directory holding cargo, rustc or
+          # rustup: ~/.cargo/bin, and on macOS Homebrew's rustup. The toolchain stays installed for
+          # the rust-cache post step.
+          no_rust_path=$(printf '%s\n' "$PATH" | tr ':' '\n' | while IFS= read -r dir; do
+            [ -x "$dir/cargo" ] || [ -x "$dir/rustc" ] || [ -x "$dir/rustup" ] || printf '%s\n' "$dir"
+          done | paste -sd: -)
+          PATH=$no_rust_path sh bindings/nim/scripts/consumer-smoke.sh "$RUNNER_TEMP/nim-package/repo" 0.0.0
+
   go:
     name: Go cgo / ${{ matrix.platform.name }}
     strategy:

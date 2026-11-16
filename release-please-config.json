@@ -39,6 +39,14 @@
         },
         {
           "type": "generic",
+          "path": "bindings/nim/README.md"
+        },
+        {
+          "type": "generic",
+          "path": "bindings/nim/lean_pq.nimble"
+        },
+        {
+          "type": "generic",
           "path": "bindings/rust/README.md"
         }
       ]
