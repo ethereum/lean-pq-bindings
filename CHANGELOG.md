@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/ethereum/lean-pq-bindings/compare/v0.10.0...v0.10.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* **zig:** link the Windows synchronization library ([#48](https://github.com/ethereum/lean-pq-bindings/issues/48)) ([a6e3827](https://github.com/ethereum/lean-pq-bindings/commit/a6e382705f8ac41bc8ccbf97131508bb824f1996))
+
 ## [0.10.0](https://github.com/ethereum/lean-pq-bindings/compare/v0.9.0...v0.10.0) (2026-11-16)
 
 
