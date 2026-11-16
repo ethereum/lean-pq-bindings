@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.10.0](https://github.com/ethereum/lean-pq-bindings/compare/v0.9.0...v0.10.0) (2026-11-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* update leanVM to 5e3ade21 for its FIPS 205 leanSPHINCS layout ([#45](https://github.com/ethereum/lean-pq-bindings/issues/45))
+
+### Features
+
+* update leanVM to 5e3ade21 for its FIPS 205 leanSPHINCS layout ([#45](https://github.com/ethereum/lean-pq-bindings/issues/45)) ([1b8f279](https://github.com/ethereum/lean-pq-bindings/commit/1b8f2792499af2ffb438da6cf7cc8de43263c332))
+
 ## [0.9.0](https://github.com/ethereum/lean-pq-bindings/compare/v0.8.0...v0.9.0) (2026-11-04)
 
 
