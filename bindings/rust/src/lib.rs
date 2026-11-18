@@ -23,3 +23,14 @@ pub const PUBLIC_KEY_LEN: usize = 32;
 
 /// A message both schemes sign.
 pub type Message = [u8; MESSAGE_LEN];
+
+/// A fresh 32-byte seed from the operating system's randomness.
+///
+/// # Panics
+///
+/// Panics when the operating system cannot supply randomness.
+fn random_seed() -> [u8; 32] {
+    let mut seed = [0; 32];
+    getrandom::fill(&mut seed).expect("the operating system's randomness is unavailable");
+    seed
+}

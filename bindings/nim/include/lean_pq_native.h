@@ -51,8 +51,13 @@ int32_t lpq_sphincs_verify(const uint8_t *public_key, size_t public_key_len, con
  * at most 16 aggregates; the call neither consumes nor retains them.
  */
 int32_t lpq_aggregate_create(lpq_aggregate *const *children, size_t child_count, const uint8_t *xmss, size_t xmss_count, const uint8_t *sphincs, size_t sphincs_count, lpq_aggregate **out);
-/* Decodes and verifies the proof; a returned handle is always a verified aggregate. */
-int32_t lpq_aggregate_from_bytes(const uint8_t *data, size_t len, lpq_aggregate **out);
+/*
+ * Decodes a proof and verifies that it proves exactly these claims, given as concatenated 64-byte
+ * public key (32) | message (32) records in any order; a repeated claim counts once. A returned
+ * handle is always a verified aggregate.
+ */
+int32_t lpq_aggregate_from_bytes(const uint8_t *data, size_t len, const uint8_t *xmss_claims, size_t xmss_count, const uint8_t *sphincs_claims, size_t sphincs_count, lpq_aggregate **out);
+/* The proof alone, without its claims. */
 int32_t lpq_aggregate_to_bytes(lpq_aggregate *aggregate, lpq_buffer *out);
 /* Claims are concatenated 64-byte public key (32) | message (32) records, strictly sorted. */
 int32_t lpq_aggregate_xmss_claims(lpq_aggregate *aggregate, lpq_buffer *out);

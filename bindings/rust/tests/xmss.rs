@@ -4,7 +4,6 @@ use lean_pq::xmss::{LeafIndex, PublicKey, SecretKey, Signature, SIGNATURE_LEN};
 use lean_pq::{Encoding, Error, PUBLIC_KEY_LEN};
 use proptest::collection::vec;
 use proptest::prelude::*;
-use signatures::lean_xmss::LeanXmssVerifyError;
 
 #[test]
 fn signs_and_verifies_at_the_boundary_leaf_indices() {
@@ -18,8 +17,8 @@ fn signs_and_verifies_at_the_boundary_leaf_indices() {
     //     2^32 - 1     last leaf of the last bottom tree
     for leaf_index in [0, (1 << 16) + 3, LeafIndex::MAX] {
         // Preparing only moves the bottom-tree build earlier.
-        key.prepare(leaf_index).unwrap();
-        let signature = key.sign(&message, leaf_index).unwrap();
+        key.prepare(leaf_index);
+        let signature = key.sign(&message, leaf_index);
 
         // The signature carries its leaf index, and verifies under the key.
         assert_eq!(signature.leaf_index(), leaf_index);
@@ -32,29 +31,20 @@ fn verify_rejects_another_message_and_another_key() {
     let key = SecretKey::from_seed([2; 32]);
     let other_key = SecretKey::from_seed([3; 32]);
     let message = [0x42; 32];
-    let signature = key.sign(&message, 7).unwrap();
+    let signature = key.sign(&message, 7);
 
     // Mutation: change the message, then the key.
     //
     //     (key,       other message)  -> reject
     //     (other key, same message)   -> reject
     //
-    // Both fail at the encoding step, naming the leaf index the signature claims:
-    //
-    //     digest = H(public parameter, randomizer, message)
-    //     another message or another key's parameter -> digest is not a codeword
+    // Both name the leaf index the signature claims.
     for (public_key, message) in [
         (key.public_key(), [0x43; 32]),
         (other_key.public_key(), message),
     ] {
         let error = public_key.verify(&message, &signature).unwrap_err();
-        assert_eq!(
-            error,
-            Error::XmssVerify {
-                leaf_index: 7,
-                reason: LeanXmssVerifyError::InvalidEncoding,
-            }
-        );
+        assert_eq!(error, Error::XmssVerify { leaf_index: 7 });
     }
 }
 
@@ -69,7 +59,7 @@ fn secret_key_encodes_as_its_seed() {
     // Decoding regenerates the same key, which signs verifiably.
     let restored = SecretKey::from_bytes(&key.to_bytes()).unwrap();
     assert_eq!(restored.public_key(), key.public_key());
-    let signature = restored.sign(&[7; 32], 9).unwrap();
+    let signature = restored.sign(&[7; 32], 9);
     key.public_key().verify(&[7; 32], &signature).unwrap();
 }
 

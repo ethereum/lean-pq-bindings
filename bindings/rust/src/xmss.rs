@@ -4,7 +4,7 @@
 //!
 //! - Paper: "Hash-Based Multi-Signatures for Post-Quantum Ethereum".
 //! - Venue: IACR Communications in Cryptology 2(1), 2025.
-//! - Normative source: the leanXMSS specification in leanVM's `crates/signatures`.
+//! - Normative source: the leanXMSS specification in leanVM's `crates/lean_xmss`.
 //!
 //! ```text
 //!     hash         Keccak-256, truncated to n = 16 bytes
@@ -24,11 +24,11 @@
 
 use std::fmt;
 
-use signatures::lean_xmss::{
-    key_gen, key_gen_from_seed, sign as xmss_sign, verify as xmss_verify,
-    LeafIndex as UpstreamLeafIndex, LeanXmssPublicKey, LeanXmssSecretKey, LeanXmssSignature,
-    Seed as UpstreamSeed, LOG_LIFETIME as UPSTREAM_LOG_LIFETIME, PUB_KEY_SIZE,
-    SEED_LEN as UPSTREAM_SEED_LEN, SIG_SIZE,
+use lean_xmss::{
+    key_gen, sign as xmss_sign, verify as xmss_verify, LeafIndex as UpstreamLeafIndex,
+    LeanXmssExpandedSecretKey, LeanXmssPublicKey, LeanXmssSignature,
+    SecretKey as UpstreamSecretKey, LOG_LIFETIME as UPSTREAM_LOG_LIFETIME, MAX_CACHED_BOTTOM_TREES,
+    PUB_KEY_SIZE, SECRET_KEY_LEN as UPSTREAM_SECRET_KEY_LEN, SIG_SIZE,
 };
 
 use crate::{Encoding, Error, Message, PUBLIC_KEY_LEN};
@@ -71,13 +71,15 @@ pub type Seed = [u8; SEED_LEN];
 pub const LOG_LIFETIME: usize = 32;
 
 // Invariant: the sizes and types above are the upstream ones, checked at compile time.
-const _: () = assert!(SEED_LEN == UPSTREAM_SEED_LEN);
+const _: () = assert!(SEED_LEN == UPSTREAM_SECRET_KEY_LEN);
 const _: () = assert!(SIGNATURE_LEN == SIG_SIZE);
 const _: () = assert!(PUBLIC_KEY_LEN == PUB_KEY_SIZE);
 const _: () = assert!(LOG_LIFETIME == UPSTREAM_LOG_LIFETIME);
 const _: () = assert!(LOG_LIFETIME == LeafIndex::BITS as usize);
+// The `SecretKey` docs promise this many cached bottom trees.
+const _: () = assert!(MAX_CACHED_BOTTOM_TREES == 8);
 const _: fn(UpstreamLeafIndex) -> LeafIndex = |index| index;
-const _: fn(UpstreamSeed) -> Seed = |seed| seed;
+const _: fn(UpstreamSecretKey) -> Seed = |seed| seed;
 
 /// A leanXMSS public key: a Merkle root and its public parameter.
 ///
@@ -115,30 +117,41 @@ impl PublicKey {
     ///
     /// # Errors
     ///
-    /// Fails, naming the leaf index and the rejecting step, when the signature does not verify.
+    /// Fails, naming the leaf index, when the signature does not verify.
     pub fn verify(&self, message: &Message, signature: &Signature) -> Result<(), Error> {
-        xmss_verify(&self.0, message, &signature.0).map_err(|reason| Error::XmssVerify {
-            leaf_index: signature.leaf_index(),
-            reason,
-        })
+        if xmss_verify(&self.0, message, &signature.0) {
+            Ok(())
+        } else {
+            Err(Error::XmssVerify {
+                leaf_index: signature.leaf_index(),
+            })
+        }
     }
 }
 
 /// A leanXMSS secret key.
 ///
-/// - It keeps the top tree and the bottom tree it last signed in.
-/// - Signing in another bottom tree first builds that tree.
+/// - It keeps the top tree and the 8 bottom trees it used last.
+/// - Signing in any other bottom tree first builds that tree.
 /// - The key holds no record of used leaf indices: the caller must keep one.
 ///
 /// Its memory is not zeroized on drop.
-pub struct SecretKey(LeanXmssSecretKey);
+pub struct SecretKey {
+    /// The seed, all of the key.
+    seed: Seed,
+    /// The trees derived from the seed, which make signing fast.
+    expanded: LeanXmssExpandedSecretKey,
+}
 
 impl SecretKey {
     /// Generates a key from the operating system's randomness.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the operating system cannot supply randomness.
     #[must_use]
     pub fn generate() -> Self {
-        // Key generation also returns the public key, which the expanded key already holds.
-        Self(key_gen().0)
+        Self::from_seed(crate::random_seed())
     }
 
     /// Derives a key from its seed, deterministically.
@@ -146,7 +159,9 @@ impl SecretKey {
     /// The seed is the whole secret: never derive a second key from it.
     #[must_use]
     pub fn from_seed(seed: Seed) -> Self {
-        Self(key_gen_from_seed(seed).0)
+        // Key generation also returns the public key, which the expanded key already holds.
+        let (expanded, _) = key_gen(&seed);
+        Self { seed, expanded }
     }
 
     /// Decodes a key from its 32-byte seed.
@@ -169,39 +184,33 @@ impl SecretKey {
     /// The bytes are secret key material.
     #[must_use]
     pub fn to_bytes(&self) -> [u8; SECRET_KEY_LEN] {
-        self.0.to_bytes()
+        self.seed
     }
 
     /// Returns the key's public key.
     #[must_use]
     pub fn public_key(&self) -> PublicKey {
-        PublicKey(self.0.public_key())
+        PublicKey(self.expanded.public_key())
     }
 
     /// Builds the bottom tree holding a leaf index, ahead of signing there.
     ///
     /// Signing builds it on demand, so this only moves the cost earlier.
-    ///
-    /// # Errors
-    ///
-    /// Fails when `2^32` randomizers give no admissible encoding of the bottom root.
-    pub fn prepare(&self, leaf_index: LeafIndex) -> Result<(), Error> {
-        self.0
-            .prepare(leaf_index)
-            .map_err(|reason| Error::XmssSign { leaf_index, reason })
+    pub fn prepare(&self, leaf_index: LeafIndex) {
+        self.expanded.prepare(leaf_index);
     }
 
     /// Signs a message at a leaf index.
     ///
     /// Never sign two different messages at the same leaf index.
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// Fails when `2^32` randomizers give no admissible encoding of the message.
-    pub fn sign(&self, message: &Message, leaf_index: LeafIndex) -> Result<Signature, Error> {
-        xmss_sign(&self.0, message, leaf_index)
-            .map(Signature)
-            .map_err(|reason| Error::XmssSign { leaf_index, reason })
+    /// Panics when none of `2^32` randomizers gives an admissible encoding, which happens with
+    /// probability below `2^-2954`.
+    #[must_use]
+    pub fn sign(&self, message: &Message, leaf_index: LeafIndex) -> Signature {
+        Signature(xmss_sign(&self.expanded, message, leaf_index))
     }
 }
 

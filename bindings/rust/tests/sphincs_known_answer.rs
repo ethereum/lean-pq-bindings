@@ -4,7 +4,7 @@
 //! (`known_answer.hex`) share: seed `37i + 11`, message `7i + 3`, both reduced mod 256.
 //!
 //! ```text
-//!     fixtures/lean_sphincs_known_answer.hex   EthLib dce7a2de / leanVM 5e3ade21:
+//!     fixtures/lean_sphincs_known_answer.hex   EthLib dce7a2de / leanVM 5e3ade21 and 28368657:
 //!                                              public key PK.seed || PK.root, then the signature
 //!     fixtures/lean_sphincs_pre_fips205.hex    the same seed and message under leanVM ed7d2b9,
 //!                                              the previous layout: root || public parameter
@@ -12,7 +12,6 @@
 
 use lean_pq::sphincs::{PublicKey, SecretKey, Signature, SIGNATURE_LEN};
 use lean_pq::{Error, PUBLIC_KEY_LEN};
-use signatures::lean_sphincs::LeanSphincsVerifyError;
 
 /// The known answer's seed: `37i + 11`.
 fn seed() -> [u8; 32] {
@@ -46,7 +45,7 @@ fn reproduces_the_known_answer() {
 
     // The same seed grows the same public key, and signing is deterministic.
     assert_eq!(key.public_key().to_bytes(), public_key);
-    assert_eq!(key.sign(&message()).unwrap().to_bytes(), signature);
+    assert_eq!(key.sign(&message()).to_bytes(), signature);
 
     // The vector verifies on its own, decoded from bytes.
     let public_key = PublicKey::from_bytes(&public_key).unwrap();
@@ -62,15 +61,12 @@ fn rejects_the_previous_layout() {
     // The previous layout grew another public key from the same seed.
     assert_ne!(key.public_key().to_bytes(), public_key);
 
-    // Its signature no longer verifies: the digest opens other FORS leaves, so the
-    // bottom counter does not encode the FORS key.
+    // Its signature no longer verifies.
     let public_key = PublicKey::from_bytes(&public_key).unwrap();
     let signature = Signature::from_bytes(&signature).unwrap();
     assert_eq!(
         public_key.verify(&message(), &signature).unwrap_err(),
-        Error::SphincsVerify {
-            reason: LeanSphincsVerifyError::InadmissibleEncoding,
-        }
+        Error::SphincsVerify
     );
 }
 

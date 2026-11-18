@@ -16,6 +16,7 @@ pub const LPQ_PANIC: c_int = 2;
 
 const XMSS_RECORD_LEN: usize = PUBLIC_KEY_LEN + MESSAGE_LEN + xmss::SIGNATURE_LEN;
 const SPHINCS_RECORD_LEN: usize = PUBLIC_KEY_LEN + MESSAGE_LEN + sphincs::SIGNATURE_LEN;
+const CLAIM_RECORD_LEN: usize = PUBLIC_KEY_LEN + MESSAGE_LEN;
 
 thread_local! {
     static LAST_ERROR: RefCell<String> = const { RefCell::new(String::new()) };
@@ -202,10 +203,8 @@ pub unsafe extern "C" fn lpq_xmss_secret_key_prepare(
     leaf_index: u32,
 ) -> c_int {
     ffi(|| {
-        handle(key, "secret-key")?
-            .0
-            .prepare(leaf_index)
-            .map_err(|e| e.to_string())
+        handle(key, "secret-key")?.0.prepare(leaf_index);
+        Ok(())
     })
 }
 
@@ -220,10 +219,7 @@ pub unsafe extern "C" fn lpq_xmss_secret_key_sign(
     ffi(|| {
         let key = handle(key, "secret-key")?;
         let message = bytes32(message, message_len, "message")?;
-        let signature = key
-            .0
-            .sign(&message, leaf_index)
-            .map_err(|e| e.to_string())?;
+        let signature = key.0.sign(&message, leaf_index);
         put_buffer(out, signature.to_bytes().to_vec())
     })
 }
@@ -326,7 +322,7 @@ pub unsafe extern "C" fn lpq_sphincs_secret_key_sign(
     ffi(|| {
         let key = handle(key, "secret-key")?;
         let message = bytes32(message, message_len, "message")?;
-        let signature = key.0.sign(&message).map_err(|e| e.to_string())?;
+        let signature = key.0.sign(&message);
         put_buffer(out, signature.to_bytes().to_vec())
     })
 }
@@ -423,11 +419,34 @@ pub unsafe extern "C" fn lpq_aggregate_create(
 pub unsafe extern "C" fn lpq_aggregate_from_bytes(
     data: *const u8,
     len: usize,
+    xmss_claims: *const u8,
+    xmss_count: usize,
+    sphincs_claims: *const u8,
+    sphincs_count: usize,
     out: *mut *mut AggregateHandle,
 ) -> c_int {
     ffi(|| {
-        let aggregate =
-            Aggregate::from_bytes(bytes(data, len, "aggregate")?).map_err(|e| e.to_string())?;
+        let xmss = records(xmss_claims, xmss_count, CLAIM_RECORD_LEN, "leanXMSS claims")?
+            .map(|record| {
+                let (public_key, message, _) = split_record(record);
+                Ok((xmss::PublicKey::from_bytes(public_key)?, message))
+            })
+            .collect::<Result<Vec<_>, lean_pq::Error>>()
+            .map_err(|e| e.to_string())?;
+        let sphincs = records(
+            sphincs_claims,
+            sphincs_count,
+            CLAIM_RECORD_LEN,
+            "leanSPHINCS claims",
+        )?
+        .map(|record| {
+            let (public_key, message, _) = split_record(record);
+            Ok((sphincs::PublicKey::from_bytes(public_key)?, message))
+        })
+        .collect::<Result<Vec<_>, lean_pq::Error>>()
+        .map_err(|e| e.to_string())?;
+        let aggregate = Aggregate::from_bytes(bytes(data, len, "aggregate")?, &xmss, &sphincs)
+            .map_err(|e| e.to_string())?;
         put_handle(out, AggregateHandle(aggregate), "aggregate")
     })
 }

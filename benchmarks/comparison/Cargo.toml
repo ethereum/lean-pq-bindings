@@ -11,8 +11,6 @@ lighthouse-bls = { package = "bls", git = "https://github.com/sigp/lighthouse.gi
 same-file = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# Upstream mock leanXMSS keys, real over a short leaf range, for untimed fixture signers.
-signatures = { git = "https://github.com/leanEthereum/leanVM.git", rev = "5e3ade21d339a45e1b3b0dba97ad9300ab50e49b", features = ["mock"] }
 
 [dev-dependencies]
 criterion = "0.8"

@@ -4,9 +4,7 @@
 use std::sync::LazyLock;
 
 use lean_pq::{aggregate, sphincs, xmss, Aggregate, Error, Message, MAX_CHILDREN};
-use leanvm::lean_sphincs::LeanSphincsVerifyError;
-use leanvm::lean_xmss::LeanXmssVerifyError;
-use leanvm::{AggregateVerifyError, AggregationError};
+use lean_vm::AggregateError;
 
 /// Two signers, shared by every test so each key is generated once.
 struct Signers {
@@ -26,20 +24,20 @@ static LEAF: LazyLock<Aggregate> =
 const FIRST: Message = [0x11; 32];
 const SECOND: Message = [0x22; 32];
 
+/// Claim lists as `Aggregate::from_bytes` takes them.
+type XmssClaims<'a> = &'a [(xmss::PublicKey, Message)];
+type SphincsClaims<'a> = &'a [(sphincs::PublicKey, Message)];
+
 fn xmss_input(message: Message, leaf_index: u32) -> (xmss::PublicKey, Message, xmss::Signature) {
     // A fresh leanXMSS signature of the message at the leaf index.
     let key = &SIGNERS.xmss;
-    (
-        key.public_key(),
-        message,
-        key.sign(&message, leaf_index).unwrap(),
-    )
+    (key.public_key(), message, key.sign(&message, leaf_index))
 }
 
 fn sphincs_input(message: Message) -> (sphincs::PublicKey, Message, sphincs::Signature) {
     // A fresh leanSPHINCS signature of the message.
     let key = &SIGNERS.sphincs;
-    (key.public_key(), message, key.sign(&message).unwrap())
+    (key.public_key(), message, key.sign(&message))
 }
 
 #[test]
@@ -60,19 +58,53 @@ fn aggregates_both_schemes_recursively_and_round_trips() {
     )
     .unwrap();
 
-    // Decoding verifies the proof again from bytes alone.
-    let received = Aggregate::from_bytes(&root.to_bytes()).unwrap();
+    // The bytes are the proof alone: the receiver supplies the claims, here in another order
+    // and with a duplicate, and decoding verifies the proof against them.
+    let bytes = root.to_bytes();
+    let received = Aggregate::from_bytes(
+        &bytes,
+        &[(xmss_key, SECOND), (xmss_key, FIRST), (xmss_key, SECOND)],
+        &[(sphincs_key, SECOND)],
+    )
+    .unwrap();
 
     // Claims are the union, sorted, with (key, FIRST) once though proven twice.
-    assert_eq!(
-        received.xmss_claims(),
-        [(xmss_key, FIRST), (xmss_key, SECOND)]
-    );
+    assert_eq!(root.xmss_claims(), [(xmss_key, FIRST), (xmss_key, SECOND)]);
+    assert_eq!(received.xmss_claims(), root.xmss_claims());
     assert_eq!(received.sphincs_claims(), [(sphincs_key, SECOND)]);
+    assert_eq!(received.to_bytes(), bytes);
     assert_eq!(
         format!("{received:?}"),
         "Aggregate { xmss_claims: 2, sphincs_claims: 1, .. }"
     );
+}
+
+#[test]
+fn rejects_claims_the_proof_does_not_prove() {
+    let xmss_key = SIGNERS.xmss.public_key();
+    // The same 32 bytes, read as a leanSPHINCS key.
+    let as_sphincs = sphincs::PublicKey::from_bytes(&xmss_key.to_bytes()).unwrap();
+    let bytes = LEAF.to_bytes();
+    Aggregate::from_bytes(&bytes, &[(xmss_key, FIRST)], &[]).unwrap();
+
+    // Mutations of LEAF's claims { xmss: (key, FIRST) }: each is a different statement.
+    //
+    //     no claims                       one short
+    //     (key, SECOND)                   another message
+    //     (key, FIRST), (key, SECOND)     one extra
+    //     sphincs: (key, FIRST)           the same claim under the other scheme
+    let mutations: [(XmssClaims, SphincsClaims); 4] = [
+        (&[], &[]),
+        (&[(xmss_key, SECOND)], &[]),
+        (&[(xmss_key, FIRST), (xmss_key, SECOND)], &[]),
+        (&[], &[(as_sphincs, FIRST)]),
+    ];
+    for (xmss_claims, sphincs_claims) in mutations {
+        assert_eq!(
+            Aggregate::from_bytes(&bytes, xmss_claims, sphincs_claims).unwrap_err(),
+            Error::AggregateRejected
+        );
+    }
 }
 
 #[test]
@@ -88,20 +120,13 @@ fn rejects_an_invalid_raw_signature_by_list_and_index() {
         Error::InvalidXmssInput {
             index: 1,
             leaf_index: 4,
-            reason: LeanXmssVerifyError::InvalidEncoding,
         }
     );
 
     // Same mutation on the leanSPHINCS list, at index 0.
     let (key, _, forged) = sphincs_input(FIRST);
     let error = aggregate(&[], &[], &[(key, SECOND, forged)]).unwrap_err();
-    assert_eq!(
-        error,
-        Error::InvalidSphincsInput {
-            index: 0,
-            reason: LeanSphincsVerifyError::InadmissibleEncoding,
-        }
-    );
+    assert_eq!(error, Error::InvalidSphincsInput { index: 0 });
 }
 
 #[test]
@@ -125,7 +150,7 @@ fn rejects_empty_input() {
     assert_eq!(
         error,
         Error::Aggregation {
-            reason: AggregationError::Empty,
+            reason: AggregateError::InvalidInput("nothing to publish"),
         }
     );
     // Bindings match on this prefix; the reason after it is upstream's wording.
@@ -134,6 +159,7 @@ fn rejects_empty_input() {
 
 #[test]
 fn rejects_tampered_and_truncated_bytes() {
+    let claims = [(SIGNERS.xmss.public_key(), FIRST)];
     let bytes = LEAF.to_bytes();
 
     // Mutation 1: flip the last bit, inside the proof.
@@ -143,34 +169,24 @@ fn rejects_tampered_and_truncated_bytes() {
     // Mutation 2: drop the last byte.
     let truncated = &bytes[..bytes.len() - 1];
 
-    // Each fails at a different step:
-    //
-    //     tampered   parses, then the proof's Merkle opening misses its root
-    //     truncated  does not parse as an aggregate
-    //
-    // Bindings match on the "invalid aggregate: " prefix of the message.
-    let tampered_error = Aggregate::from_bytes(&tampered).unwrap_err();
-    // The snark's own reason is opaque upstream; its message names the step.
-    assert!(matches!(
-        tampered_error,
-        Error::InvalidAggregate {
-            reason: AggregateVerifyError::Snark(_)
-        }
-    ));
-    assert_eq!(
-        tampered_error.to_string(),
-        "invalid aggregate: the snark did not verify: Merkle root mismatch"
-    );
+    // Mutation 3: flip a bit of the deferred point, which the encoding carries first.
+    let mut moved = bytes.clone();
+    moved[8] ^= 1;
 
-    let truncated_error = Aggregate::from_bytes(truncated).unwrap_err();
+    // Each fails, at decoding or at verification, against the proof's own claims.
+    for mutated in [&tampered[..], truncated, &moved[..]] {
+        let error = Aggregate::from_bytes(mutated, &claims, &[]).unwrap_err();
+        assert!(
+            matches!(error, Error::MalformedAggregate | Error::AggregateRejected),
+            "{error:?}"
+        );
+    }
     assert_eq!(
-        truncated_error,
-        Error::InvalidAggregate {
-            reason: AggregateVerifyError::MalformedEncoding
-        }
+        Aggregate::from_bytes(truncated, &claims, &[]).unwrap_err(),
+        Error::MalformedAggregate
     );
     assert_eq!(
-        truncated_error.to_string(),
-        "invalid aggregate: not a valid aggregate encoding"
+        Error::MalformedAggregate.to_string(),
+        "malformed aggregate: the bytes are not a leanVM aggregate proof"
     );
 }

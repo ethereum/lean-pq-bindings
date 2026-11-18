@@ -5,13 +5,17 @@
 //! - Paper: "Hash-Based Multi-Signatures for Post-Quantum Ethereum", IACR Communications in Cryptology 2(1), 2025.
 //! - Construction 4: an aggregate is a succinct argument of knowledge of every signature.
 //! - Theorem 2: it is as unforgeable as the signatures, given adaptive knowledge soundness.
+//!
+//! An encoded aggregate is the proof alone: the claims travel separately, and a receiver checks
+//! the proof against the claims it expects.
 
 use std::fmt;
-use std::sync::{Mutex, Once, PoisonError};
+use std::sync::Once;
 
-use leanvm::lean_sphincs::verify as verify_sphincs;
-use leanvm::lean_xmss::verify as verify_xmss;
-use leanvm::{aggregate as prove, setup as setup_leanvm, EthereumProof, MAX_RECURSIONS};
+use lean_vm::{
+    aggregate as prove, setup as setup_lean_vm, AggregateClaims, AggregateProof, OutputClaims,
+    MAX_LOG_INV_RATE, MAX_RECURSIONS, MIN_LOG_INV_RATE,
+};
 
 use crate::{sphincs, xmss, Error, Message};
 
@@ -27,56 +31,74 @@ const _: () = assert!(MAX_CHILDREN == MAX_RECURSIONS);
 /// - A larger exponent gives a smaller proof but slower proving.
 const LOG_INV_RATE: usize = 2;
 
-/// Serializes proving, which leanVM forbids running twice at once in one process.
-static PROVER: Mutex<()> = Mutex::new(());
+const _: () = assert!(MIN_LOG_INV_RATE <= LOG_INV_RATE && LOG_INV_RATE <= MAX_LOG_INV_RATE);
 
-/// Guards the one-time guest build.
+/// Guards the one-time prover start and guest build.
 static SETUP: Once = Once::new();
 
-/// Builds the aggregation guest and its tables, once per process.
+/// Starts leanVM's prover pool, one thread per core, and builds the aggregation guest, once per
+/// process.
 ///
 /// Aggregating and decoding call it themselves, so calling it only moves that cost earlier.
 pub fn setup() {
-    SETUP.call_once(setup_leanvm);
+    SETUP.call_once(|| setup_lean_vm(0));
 }
 
 /// A verified recursive proof that each listed public key signed its message.
 ///
-/// - Every value was either proven here or decoded and verified.
-/// - It attests the claims it lists, not the claims a caller wanted: compare them.
+/// - Every value was either proven here or decoded and verified against the claims it lists.
 /// - A claim names a public key and a message, never the leaf index used.
+/// - Its encoding is the proof alone: send the claims alongside, or let the receiver rebuild them.
 #[derive(Clone)]
-pub struct Aggregate(EthereumProof);
+pub struct Aggregate {
+    claims: AggregateClaims,
+    proof: AggregateProof,
+}
 
 impl Aggregate {
-    /// Decodes an aggregate and verifies its proof.
+    /// Decodes a proof and verifies that it proves exactly these claims.
+    ///
+    /// The claims may come in any order, and a repeated claim counts once.
     ///
     /// # Errors
     ///
-    /// Fails when the bytes are malformed or the proof does not verify.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
+    /// - Fails when the bytes are not an encoded aggregate proof.
+    /// - Fails when the proof does not prove exactly these claims.
+    pub fn from_bytes(
+        bytes: &[u8],
+        xmss_claims: &[(xmss::PublicKey, Message)],
+        sphincs_claims: &[(sphincs::PublicKey, Message)],
+    ) -> Result<Self, Error> {
         // Verification needs the guest's tables.
         setup();
-        // Parsing only checks shapes: nothing decoded is trusted until the proof verifies.
-        let proof = EthereumProof::from_bytes(bytes)
-            .map_err(|reason| Error::InvalidAggregate { reason })?;
-        proof
-            .verify()
-            .map_err(|reason| Error::InvalidAggregate { reason })?;
-        Ok(Self(proof))
+        let proof = AggregateProof::from_bytes(bytes).ok_or(Error::MalformedAggregate)?;
+        let claims = AggregateClaims {
+            lean_xmss: sorted_claims(xmss_claims.iter().map(|(key, message)| (key.0, *message))),
+            lean_sphincs: sorted_claims(
+                sphincs_claims
+                    .iter()
+                    .map(|(key, message)| (key.0, *message)),
+            ),
+            // These bindings neither make nor accept leanDA blob commitments.
+            da_commitment: None,
+        };
+        if !proof.verify(&claims) {
+            return Err(Error::AggregateRejected);
+        }
+        Ok(Self { claims, proof })
     }
 
-    /// Encodes the aggregate: its claims, then its proof.
+    /// Encodes the proof, without its claims.
     #[must_use]
     pub fn to_bytes(&self) -> Vec<u8> {
-        self.0.to_bytes()
+        self.proof.to_bytes()
     }
 
     /// Returns the proven leanXMSS claims, strictly sorted by public key then message.
     #[must_use]
     pub fn xmss_claims(&self) -> Vec<(xmss::PublicKey, Message)> {
-        self.0
-            .xmss_signers()
+        self.claims
+            .lean_xmss
             .iter()
             .map(|&(key, message)| (xmss::PublicKey(key), message))
             .collect()
@@ -85,8 +107,8 @@ impl Aggregate {
     /// Returns the proven leanSPHINCS claims, strictly sorted by public key then message.
     #[must_use]
     pub fn sphincs_claims(&self) -> Vec<(sphincs::PublicKey, Message)> {
-        self.0
-            .lean_sphincs_signers()
+        self.claims
+            .lean_sphincs
             .iter()
             .map(|&(key, message)| (sphincs::PublicKey(key), message))
             .collect()
@@ -98,10 +120,18 @@ impl fmt::Debug for Aggregate {
         // Claim counts identify an aggregate in a log.
         // The proof bytes would drown it.
         f.debug_struct("Aggregate")
-            .field("xmss_claims", &self.0.xmss_signers().len())
-            .field("sphincs_claims", &self.0.lean_sphincs_signers().len())
+            .field("xmss_claims", &self.claims.lean_xmss.len())
+            .field("sphincs_claims", &self.claims.lean_sphincs.len())
             .finish_non_exhaustive()
     }
+}
+
+/// Claims strictly sorted, the order a proof's statement lists them in.
+fn sorted_claims<K: Ord>(claims: impl Iterator<Item = (K, Message)>) -> Vec<(K, Message)> {
+    let mut claims: Vec<_> = claims.collect();
+    claims.sort_unstable();
+    claims.dedup();
+    claims
 }
 
 /// Proves raw signatures and child aggregates together as one aggregate.
@@ -133,25 +163,28 @@ pub fn aggregate(
         });
     }
 
-    // Why: the prover assumes every raw signature is valid and panics on a forged one.
+    // Why: the prover catches only some invalid signatures, and the rest make proving fail.
     //
-    // Checking here turns that panic into an error that names the culprit.
+    // Checking here turns every one into an error that names the culprit.
     for (index, (public_key, message, signature)) in xmss.iter().enumerate() {
-        verify_xmss(&public_key.0, message, &signature.0).map_err(|reason| {
-            Error::InvalidXmssInput {
+        public_key
+            .verify(message, signature)
+            .map_err(|_| Error::InvalidXmssInput {
                 index,
                 leaf_index: signature.leaf_index(),
-                reason,
-            }
-        })?;
+            })?;
     }
     for (index, (public_key, message, signature)) in sphincs.iter().enumerate() {
-        verify_sphincs(&public_key.0, message, &signature.0)
-            .map_err(|reason| Error::InvalidSphincsInput { index, reason })?;
+        public_key
+            .verify(message, signature)
+            .map_err(|_| Error::InvalidSphincsInput { index })?;
     }
 
     // The prover takes owned inputs: copy the proofs and unwrap the signature types.
-    let children: Vec<EthereumProof> = children.iter().map(|child| child.0.clone()).collect();
+    let children: Vec<(AggregateClaims, AggregateProof)> = children
+        .iter()
+        .map(|child| (child.claims.clone(), child.proof.clone()))
+        .collect();
     let xmss = xmss
         .iter()
         .map(|(public_key, message, signature)| (public_key.0, *message, signature.0.clone()))
@@ -161,12 +194,16 @@ pub fn aggregate(
         .map(|(public_key, message, signature)| (public_key.0, *message, signature.0.clone()))
         .collect();
 
-    // Build the guest before taking the lock, so waiting callers do not also wait on it.
     setup();
-    // A panic in an earlier proof poisons the lock but leaves no state behind, so proceed.
-    let _prover = PROVER.lock().unwrap_or_else(PoisonError::into_inner);
     // No DA blobs, and keep every claim the inputs cover.
-    prove(&children, xmss, sphincs, &[], None, LOG_INV_RATE)
-        .map(Aggregate)
-        .map_err(|reason| Error::Aggregation { reason })
+    prove(
+        &children,
+        xmss,
+        sphincs,
+        None,
+        OutputClaims::All,
+        LOG_INV_RATE,
+    )
+    .map(|(claims, proof)| Aggregate { claims, proof })
+    .map_err(|reason| Error::Aggregation { reason })
 }

@@ -1,6 +1,6 @@
 //! leanSPHINCS: a stateless hash-based signature.
 //!
-//! Normative source: the leanSPHINCS specification in leanVM's `crates/signatures`, which
+//! Normative source: the leanSPHINCS specification in leanVM's `crates/lean_sphincs`, which
 //! follows the layout of FIPS 205 (SLH-DSA) with Keccak-256 as the hash.
 //!
 //! ```text
@@ -22,10 +22,10 @@
 
 use std::fmt;
 
-use signatures::lean_sphincs::{
-    key_gen, key_gen_from_seed, sign as sphincs_sign, verify as sphincs_verify,
-    LeanSphincsPublicKey, LeanSphincsSecretKey, LeanSphincsSignature, Seed as UpstreamSeed,
-    PUB_KEY_SIZE, SEED_LEN as UPSTREAM_SEED_LEN, SIG_SIZE,
+use lean_sphincs::{
+    key_gen, sign as sphincs_sign, verify as sphincs_verify, LeanSphincsPublicKey,
+    LeanSphincsSignature, SecretKey as UpstreamSecretKey, PUB_KEY_SIZE,
+    SECRET_KEY_LEN as UPSTREAM_SECRET_KEY_LEN, SIG_SIZE,
 };
 
 use crate::{Encoding, Error, Message, PUBLIC_KEY_LEN};
@@ -52,10 +52,10 @@ pub const SIGNATURE_LEN: usize = 7740;
 pub type Seed = [u8; SEED_LEN];
 
 // Invariant: the sizes and types above are the upstream ones, checked at compile time.
-const _: () = assert!(SEED_LEN == UPSTREAM_SEED_LEN);
+const _: () = assert!(SEED_LEN == UPSTREAM_SECRET_KEY_LEN);
 const _: () = assert!(SIGNATURE_LEN == SIG_SIZE);
 const _: () = assert!(PUBLIC_KEY_LEN == PUB_KEY_SIZE);
-const _: fn(UpstreamSeed) -> Seed = |seed| seed;
+const _: fn(UpstreamSecretKey) -> Seed = |seed| seed;
 
 /// A leanSPHINCS public key: `PK.seed`, the public parameter every hash is keyed with, and
 /// `PK.root`, the root of the top tree.
@@ -92,10 +92,13 @@ impl PublicKey {
     ///
     /// # Errors
     ///
-    /// Fails, naming the rejecting step, when the signature does not verify.
+    /// Fails when the signature does not verify.
     pub fn verify(&self, message: &Message, signature: &Signature) -> Result<(), Error> {
-        sphincs_verify(&self.0, message, &signature.0)
-            .map_err(|reason| Error::SphincsVerify { reason })
+        if sphincs_verify(&self.0, message, &signature.0) {
+            Ok(())
+        } else {
+            Err(Error::SphincsVerify)
+        }
     }
 }
 
@@ -104,17 +107,20 @@ impl PublicKey {
 /// Its memory is not zeroized on drop.
 pub struct SecretKey {
     /// The seed, all of the key.
-    inner: LeanSphincsSecretKey,
+    seed: Seed,
     /// The public key, kept because rebuilding it builds the whole top tree.
     public_key: LeanSphincsPublicKey,
 }
 
 impl SecretKey {
     /// Generates a key from the operating system's randomness.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the operating system cannot supply randomness.
     #[must_use]
     pub fn generate() -> Self {
-        let (inner, public_key) = key_gen();
-        Self { inner, public_key }
+        Self::from_seed(crate::random_seed())
     }
 
     /// Derives a key from its seed, deterministically.
@@ -122,8 +128,8 @@ impl SecretKey {
     /// The seed is the whole secret.
     #[must_use]
     pub fn from_seed(seed: Seed) -> Self {
-        let (inner, public_key) = key_gen_from_seed(seed);
-        Self { inner, public_key }
+        let public_key = key_gen(&seed);
+        Self { seed, public_key }
     }
 
     /// Decodes a key from its 32-byte seed.
@@ -146,7 +152,7 @@ impl SecretKey {
     /// The bytes are secret key material.
     #[must_use]
     pub fn to_bytes(&self) -> [u8; SECRET_KEY_LEN] {
-        self.inner.to_bytes()
+        self.seed
     }
 
     /// Returns the key's public key.
@@ -159,13 +165,13 @@ impl SecretKey {
     ///
     /// Signing is deterministic: the randomizer derives from the seed and the message.
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// Fails when `2^32` encoding counters give no admissible encoding for a layer.
-    pub fn sign(&self, message: &Message) -> Result<Signature, Error> {
-        sphincs_sign(&self.inner, message)
-            .map(Signature)
-            .map_err(|reason| Error::SphincsSign { reason })
+    /// Panics when every encoding counter of a layer misses a codeword, which happens with
+    /// probability below `2^-378193`.
+    #[must_use]
+    pub fn sign(&self, message: &Message) -> Signature {
+        Signature(sphincs_sign(&self.seed, message))
     }
 }
 

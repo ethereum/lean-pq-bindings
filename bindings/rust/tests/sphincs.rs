@@ -4,32 +4,23 @@ use lean_pq::sphincs::{PublicKey, SecretKey, Signature, SECRET_KEY_LEN, SIGNATUR
 use lean_pq::{Encoding, Error, PUBLIC_KEY_LEN};
 use proptest::collection::vec;
 use proptest::prelude::*;
-use signatures::lean_sphincs::LeanSphincsVerifyError;
 
 #[test]
 fn signs_verifies_and_rejects_another_message() {
     let key = SecretKey::from_seed([1; 32]);
     let message = [0x42; 32];
-    let signature = key.sign(&message).unwrap();
+    let signature = key.sign(&message);
     key.public_key().verify(&message, &signature).unwrap();
 
     // Signing is deterministic: the randomizer derives from the seed and the message.
-    assert_eq!(key.sign(&message).unwrap(), signature);
+    assert_eq!(key.sign(&message), signature);
 
     // Mutation: verify the same signature against another message.
-    //
-    // The new digest opens other FORS leaves, so the bottom layer's counter no longer
-    // encodes the FORS key.
     let error = key
         .public_key()
         .verify(&[0x43; 32], &signature)
         .unwrap_err();
-    assert_eq!(
-        error,
-        Error::SphincsVerify {
-            reason: LeanSphincsVerifyError::InadmissibleEncoding,
-        }
-    );
+    assert_eq!(error, Error::SphincsVerify);
 }
 
 #[test]
@@ -42,10 +33,7 @@ fn secret_key_encodes_as_its_seed() {
     let restored = SecretKey::from_bytes(&key.to_bytes()).unwrap();
     assert_eq!(restored.public_key(), key.public_key());
     let message = [7; 32];
-    assert_eq!(
-        restored.sign(&message).unwrap(),
-        key.sign(&message).unwrap()
-    );
+    assert_eq!(restored.sign(&message), key.sign(&message));
 }
 
 #[test]
