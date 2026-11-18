@@ -300,16 +300,26 @@ func AggregateSignatures(children []*Aggregate, xmss []XmssSignedMessage, sphinc
 	return &Aggregate{handle: output}, nil
 }
 
-// AggregateFromBytes decodes and verifies an aggregate.
-func AggregateFromBytes(bytes []byte) (*Aggregate, error) {
+// AggregateFromBytes decodes a proof and verifies that it proves exactly the given claims, which
+// may be in any order; a repeated claim counts once. The encoding is the proof alone: send the
+// claims alongside it or have the receiver rebuild them. Any other claim set is rejected.
+func AggregateFromBytes(bytes []byte, xmssClaims, sphincsClaims []Claim) (*Aggregate, error) {
+	xmssRecords := claimRecords(xmssClaims)
+	sphincsRecords := claimRecords(sphincsClaims)
 	var handle *C.lpq_aggregate
-	if err := checkStatus(C.lpq_aggregate_from_bytes(bytesPointer(bytes), C.size_t(len(bytes)), &handle)); err != nil {
+	status := C.lpq_aggregate_from_bytes(
+		bytesPointer(bytes), C.size_t(len(bytes)),
+		bytesPointer(xmssRecords), C.size_t(len(xmssClaims)),
+		bytesPointer(sphincsRecords), C.size_t(len(sphincsClaims)),
+		&handle,
+	)
+	if err := checkStatus(status); err != nil {
 		return nil, err
 	}
 	return &Aggregate{handle: handle}, nil
 }
 
-// Bytes returns the aggregate's proof encoding.
+// Bytes returns the aggregate's proof encoding, without its claims.
 func (aggregate *Aggregate) Bytes() ([]byte, error) {
 	handle, release, err := aggregate.acquire()
 	if err != nil {
@@ -370,6 +380,16 @@ func (aggregate *Aggregate) claims(call func(*C.lpq_aggregate, *C.lpq_buffer) C.
 		copy(claims[index].Message[:], record[keyLen:claimRecordLen])
 	}
 	return claims, nil
+}
+
+// claimRecords packs claims into the native bridge's 64-byte public key | message records.
+func claimRecords(claims []Claim) []byte {
+	records := make([]byte, 0, len(claims)*claimRecordLen)
+	for index := range claims {
+		records = append(records, claims[index].PublicKey[:]...)
+		records = append(records, claims[index].Message[:]...)
+	}
+	return records
 }
 
 func (aggregate *Aggregate) acquire() (*C.lpq_aggregate, func(), error) {

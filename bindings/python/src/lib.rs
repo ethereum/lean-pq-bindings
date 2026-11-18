@@ -46,6 +46,7 @@ fn sphincs_signature(bytes: &[u8]) -> PyResult<sphincs::Signature> {
 }
 
 type SignedMessage = (PyBackedBytes, PyBackedBytes, PyBackedBytes);
+type Claim = (PyBackedBytes, PyBackedBytes);
 
 #[pyclass(name = "XmssSecretKey", frozen, module = "py_lean_pq")]
 struct PyXmssSecretKey {
@@ -87,9 +88,8 @@ impl PyXmssSecretKey {
         PyBytes::new(py, &self.inner.public_key().to_bytes())
     }
 
-    fn prepare(&self, py: Python<'_>, leaf_index: xmss::LeafIndex) -> PyResult<()> {
-        py.detach(|| self.inner.prepare(leaf_index))
-            .map_err(api_error)
+    fn prepare(&self, py: Python<'_>, leaf_index: xmss::LeafIndex) {
+        py.detach(|| self.inner.prepare(leaf_index));
     }
 
     fn sign<'py>(
@@ -99,9 +99,7 @@ impl PyXmssSecretKey {
         leaf_index: xmss::LeafIndex,
     ) -> PyResult<Bound<'py, PyBytes>> {
         let message = self::message(message)?;
-        let signature = py
-            .detach(|| self.inner.sign(&message, leaf_index))
-            .map_err(api_error)?;
+        let signature = py.detach(|| self.inner.sign(&message, leaf_index));
         Ok(PyBytes::new(py, &signature.to_bytes()))
     }
 }
@@ -148,7 +146,7 @@ impl PySphincsSecretKey {
 
     fn sign<'py>(&self, py: Python<'py>, message: &[u8]) -> PyResult<Bound<'py, PyBytes>> {
         let message = self::message(message)?;
-        let signature = py.detach(|| self.inner.sign(&message)).map_err(api_error)?;
+        let signature = py.detach(|| self.inner.sign(&message));
         Ok(PyBytes::new(py, &signature.to_bytes()))
     }
 }
@@ -171,10 +169,32 @@ fn claims<'py, const N: usize>(
 #[pymethods]
 impl PyAggregate {
     #[classmethod]
-    fn from_bytes(_cls: &Bound<'_, PyType>, py: Python<'_>, data: &[u8]) -> PyResult<Self> {
+    #[pyo3(
+        signature = (data, xmss_claims = Vec::new(), sphincs_claims = Vec::new()),
+        text_signature = "(data, xmss_claims=(), sphincs_claims=())"
+    )]
+    fn from_bytes(
+        _cls: &Bound<'_, PyType>,
+        py: Python<'_>,
+        data: &[u8],
+        xmss_claims: Vec<Claim>,
+        sphincs_claims: Vec<Claim>,
+    ) -> PyResult<Self> {
+        let xmss_claims = xmss_claims
+            .iter()
+            .map(|(public_key, message)| {
+                Ok((xmss_public_key(public_key)?, self::message(message)?))
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        let sphincs_claims = sphincs_claims
+            .iter()
+            .map(|(public_key, message)| {
+                Ok((sphincs_public_key(public_key)?, self::message(message)?))
+            })
+            .collect::<PyResult<Vec<_>>>()?;
         Ok(Self {
             inner: py
-                .detach(|| lean_pq::Aggregate::from_bytes(data))
+                .detach(|| lean_pq::Aggregate::from_bytes(data, &xmss_claims, &sphincs_claims))
                 .map_err(api_error)?,
         })
     }

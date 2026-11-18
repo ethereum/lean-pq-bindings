@@ -86,17 +86,19 @@ an independent `customSmallerIsBetter` export for optional external consumers;
 the two output paths must resolve to different files. The current CI dashboard
 does not use this export. Fixture setup and post-timing claim checks are
 outside the timed region. The aggregation and independent-signature fixtures
-sign with upstream's mock
-leanXMSS keys (`signatures::lean_xmss::mock`), as upstream's own benchmarks do:
-each is real only over leaf indices 0 through 15, so its signatures are real
-leanXMSS signatures that verify and aggregate like any other, at a fraction of
-a full key's generation cost. Every fixture signer-and-message pair has its own
-seed, in a seed domain the full keys never use. Full keys remain for the timed
-key-generation workload and the fast sign, serialization, and single-verify
-benchmarks. Aggregate verification times
-`lean_pq::Aggregate::from_bytes`, which decodes and verifies the proof; the
-listed claims are compared with the expected signers afterwards. Lighthouse operations are calibrated in batches of at least 10 ms and
-reported per operation.
+sign with real leanXMSS keys, one per signer-and-message pair, each derived
+from its own seed in a seed domain the full keys never use. Every fixture
+signature lies in its key's first bottom tree (leaf indices 0 through 15), so
+each fixture key builds one bottom tree. Fixture generation is untimed and runs
+on every available core; a 512-signer fixture still takes noticeable time.
+Full keys remain for the timed key-generation workload and the fast sign,
+serialization, and single-verify benchmarks. An aggregate's encoding is its
+proof alone, so aggregate verification times
+`lean_pq::Aggregate::from_bytes` given the expected signer-and-message claims:
+it decodes the proof and verifies it against exactly those claims, just as
+Lighthouse verifies against the expected messages and public keys. Lighthouse
+operations are calibrated in batches of at least 10 ms and reported per
+operation.
 
 The local equivalent of the slow PR job is:
 

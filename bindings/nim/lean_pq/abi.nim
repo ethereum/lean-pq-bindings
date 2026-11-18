@@ -116,7 +116,11 @@ proc lpqAggregateCreate*(
   sphincs: ptr byte, sphincsCount: csize_t,
   output: ptr ptr LpqAggregate): int32 {.
   importc: "lpq_aggregate_create", header: lpqHeader.}
-proc lpqAggregateFromBytes*(data: ptr byte, len: csize_t, output: ptr ptr LpqAggregate): int32 {.
+proc lpqAggregateFromBytes*(
+  data: ptr byte, len: csize_t,
+  xmssClaims: ptr byte, xmssCount: csize_t,
+  sphincsClaims: ptr byte, sphincsCount: csize_t,
+  output: ptr ptr LpqAggregate): int32 {.
   importc: "lpq_aggregate_from_bytes", header: lpqHeader.}
 proc lpqAggregateToBytes*(aggregate: ptr LpqAggregate, output: ptr LpqBuffer): int32 {.
   importc: "lpq_aggregate_to_bytes", header: lpqHeader.}

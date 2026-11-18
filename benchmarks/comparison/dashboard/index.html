@@ -257,7 +257,7 @@
         </div>
         <div>
           <dt>Same-claim verification</dt>
-          <dd>Decodes and verifies the LeanVM proof, or checks the aggregate BLS signature against that one message and the complete set of signers. The claims a LeanVM proof lists are compared with the expected signers outside the timed region.</dd>
+          <dd>Decodes the LeanVM proof and verifies it against the expected signer-and-message claims, or checks the aggregate BLS signature against that one message and the complete set of signers.</dd>
         </div>
         <div>
           <dt>Recursive same-claim aggregation</dt>
@@ -277,7 +277,7 @@
         </div>
         <div>
           <dt>Mixed-claim verification</dt>
-          <dd>Decodes and verifies one LeanVM proof listing every signer-and-message claim. For BLS, the benchmark groups the same public keys per claim and verifies one aggregate signature against either 8 or 16 message-and-key groups.</dd>
+          <dd>Decodes one LeanVM proof and verifies it against every expected signer-and-message claim. For BLS, the benchmark groups the same public keys per claim and verifies one aggregate signature against either 8 or 16 message-and-key groups.</dd>
         </div>
         <div>
           <dt>Independent signature verification</dt>

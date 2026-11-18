@@ -30,9 +30,12 @@ async function main() {
       xmss: [{ publicKey: xmssKey.publicKey, message, signature: xmssSignature }],
       sphincs: [{ publicKey: sphincsKey.publicKey, message, signature: sphincsSignature }],
     })
-    const received = await lpq.Aggregate.fromBytes(aggregate.toBytes())
-    assert.deepEqual(received.xmssClaims, [{ publicKey: xmssKey.publicKey, message }])
-    assert.deepEqual(received.sphincsClaims, [{ publicKey: sphincsKey.publicKey, message }])
+    const xmss = [{ publicKey: xmssKey.publicKey, message }]
+    const sphincs = [{ publicKey: sphincsKey.publicKey, message }]
+    const received = await lpq.Aggregate.fromBytes(aggregate.toBytes(), { xmss, sphincs })
+    assert.deepEqual(received.xmssClaims, xmss)
+    assert.deepEqual(received.sphincsClaims, sphincs)
+    await assert.rejects(lpq.Aggregate.fromBytes(aggregate.toBytes(), { xmss }), /does not prove the given claims/)
     console.log('aggregate ok')
   }
 }

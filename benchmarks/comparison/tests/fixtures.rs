@@ -1,6 +1,7 @@
 use lean_pq_comparison::{
-    deterministic_key_material, lean_fixture_signer, lean_full_key_seed, BlsFixtureSet, FixtureSet,
-    FIXTURE_FIRST_LEAF, FIXTURE_LAST_LEAF, MAX_SIGNERS, MIXED_CLAIM_COUNTS, MIXED_CLAIM_SIGNATURES,
+    deterministic_key_material, lean_fixture_signer, lean_fixture_signers, lean_full_key_seed,
+    BlsFixtureSet, FixtureSet, FIXTURE_FIRST_LEAF, FIXTURE_LAST_LEAF, MAX_SIGNERS,
+    MIXED_CLAIM_COUNTS, MIXED_CLAIM_SIGNATURES,
 };
 
 #[test]
@@ -133,7 +134,7 @@ fn configured_mixed_claim_fixtures_have_even_signer_groups() {
 }
 
 #[test]
-fn fixture_signers_are_deterministic_real_signatures_in_the_mock_range() {
+fn fixture_signers_are_deterministic_real_signatures_in_the_fixture_range() {
     let (public_key, message, signature) = lean_fixture_signer(0, 1).unwrap();
 
     assert_eq!(
@@ -143,6 +144,17 @@ fn fixture_signers_are_deterministic_real_signatures_in_the_mock_range() {
     assert_eq!(message, deterministic_key_material(1).unwrap());
     assert!((FIXTURE_FIRST_LEAF..=FIXTURE_LAST_LEAF).contains(&signature.leaf_index()));
     public_key.verify(&message, &signature).unwrap();
+}
+
+#[test]
+fn parallel_fixture_signers_match_sequential_ones_in_order() {
+    let signers = lean_fixture_signers(3..6, |index| index % 2).unwrap();
+    let sequential = (3..6)
+        .map(|index| lean_fixture_signer(index, index % 2).unwrap())
+        .collect::<Vec<_>>();
+
+    assert_eq!(signers, sequential);
+    assert!(lean_fixture_signers(0..0, |_| 0).unwrap().is_empty());
 }
 
 #[test]

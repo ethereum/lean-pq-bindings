@@ -1,4 +1,4 @@
-/** A `(publicKey, message)` pair an aggregate attests. Both are 32 bytes. */
+/** A `(publicKey, message)` pair an aggregate proves. Both are 32 bytes. */
 export interface Claim {
   publicKey: Buffer
   message: Buffer
@@ -53,13 +53,18 @@ export declare function sphincsVerify(publicKey: Buffer, message: Buffer, signat
 
 /**
  * A recursive proof that each listed public key signed its message. Every instance has been
- * proven by `aggregate` or verified by `Aggregate.fromBytes`. It attests the claims it lists, not
- * the claims you wanted: compare `xmssClaims` and `sphincsClaims` against what you expect.
+ * proven by `aggregate` or verified by `Aggregate.fromBytes`. Its encoding is the proof alone:
+ * send the claims alongside it, or let the receiver rebuild them.
  */
 export declare class Aggregate {
   private constructor()
-  /** Decodes and verifies an aggregate. */
-  static fromBytes(data: Buffer): Promise<Aggregate>
+  /**
+   * Decodes a proof and verifies that it proves exactly the given claims, which may come in any
+   * order; a repeated claim counts once. An omitted list means no claims of that scheme. Rejects
+   * when the bytes are not an aggregate proof or the proof does not prove exactly these claims.
+   */
+  static fromBytes(data: Buffer, claims?: { xmss?: Array<Claim>; sphincs?: Array<Claim> }): Promise<Aggregate>
+  /** The proof alone, without its claims. */
   toBytes(): Buffer
   /** Strictly sorted. */
   get xmssClaims(): Array<Claim>

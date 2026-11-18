@@ -121,11 +121,14 @@ proc main() =
     ).expect("leaf")
     root = LeanPqAggregate.init([leaf]).expect("root")
 
+  # The encoding is the proof alone: the receiver supplies the claims it expects.
   let
     encoded = root.toBytes().expect("bytes")
-    received = LeanPqAggregate.fromBytes(encoded).expect("decodes and verifies")
-  doAssert received.xmssClaims().expect("claims") ==
-    @[LeanPqClaim(publicKey: xmssPublicKey, message: message)]
+    expectedXmss = [LeanPqClaim(publicKey: xmssPublicKey, message: message)]
+    expectedSphincs = [LeanPqClaim(publicKey: sphincsPublicKey, message: message)]
+    received = LeanPqAggregate.fromBytes(encoded, expectedXmss, expectedSphincs).expect("verifies")
+  doAssert received.xmssClaims().expect("claims") == @expectedXmss
+  doAssert LeanPqAggregate.fromBytes(encoded, expectedXmss).isErr()
 
   # Handles are freed when collected; `close` frees them now.
   xmssKey.close()
@@ -139,10 +142,12 @@ leanXMSS keys are stateful: persist your own durable high-water leaf index along
 material, the leanXMSS or leanSPHINCS seed; wipe your copies when done.
 
 `LeanPqAggregate.init` verifies every raw signature before proving and runs one proof at a time per
-process; one aggregation takes seconds and about 1.6 GB of memory. `LeanPqAggregate.fromBytes`
-verifies the proof it decodes, so every `LeanPqAggregate` value is proven. An aggregate attests the
-claims it lists, not the claims you wanted: compare `xmssClaims` and `sphincsClaims` against what
-you expect. `leanPqSetup()` moves the one-time guest build ahead of the first proof; calling it is
-optional and idempotent.
+process; one aggregation takes seconds and about 1.6 GB of memory. `LeanPqAggregate.toBytes` encodes
+the proof alone, without its claims: send the claims alongside it, or let the receiver rebuild them.
+`LeanPqAggregate.fromBytes(bytes, xmssClaims, sphincsClaims)` verifies the proof against exactly
+the given claims, in any order with a repeated claim counting once, and fails for any other claim
+set, so every `LeanPqAggregate` value is proven. `xmssClaims` and `sphincsClaims` return the claims
+strictly sorted, in the form `fromBytes` takes. `leanPqSetup()` moves the one-time guest build ahead
+of the first proof; calling it is optional and idempotent.
 
 Do not `close` a value while another thread uses it.

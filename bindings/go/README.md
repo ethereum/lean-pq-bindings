@@ -127,20 +127,25 @@ func main() {
     }
     defer root.Close()
 
-    encoded, err := root.Bytes()
+    encoded, err := root.Bytes() // the proof alone: send the claims alongside it
     if err != nil {
         log.Fatal(err)
     }
-    received, err := leanpq.AggregateFromBytes(encoded) // decodes and verifies
+    xmssClaims, err := root.XmssClaims()
+    if err != nil {
+        log.Fatal(err)
+    }
+    sphincsClaims, err := root.SphincsClaims()
+    if err != nil {
+        log.Fatal(err)
+    }
+    // Decodes the proof and verifies it proves exactly these claims.
+    received, err := leanpq.AggregateFromBytes(encoded, xmssClaims, sphincsClaims)
     if err != nil {
         log.Fatal(err)
     }
     defer received.Close()
-    claims, err := received.XmssClaims()
-    if err != nil {
-        log.Fatal(err)
-    }
-    log.Printf("leanXMSS claims: %x", claims)
+    log.Printf("leanXMSS claims: %x", xmssClaims)
 }
 ```
 
@@ -149,7 +154,9 @@ leanXMSS keys are stateful: persist your own durable high-water leaf index along
 keys are stateless and deterministic: `SphincsSecretKey.Bytes()` is the 32-byte seed, and a key
 signs at most 2^30 messages.
 
-An aggregate attests the claims it lists, not the claims you wanted: compare `XmssClaims()` and
-`SphincsClaims()` against what you expect. `AggregateSignatures` verifies every raw signature before
-proving, and `AggregateFromBytes` verifies the proof it decodes, so every `Aggregate` is proven.
+`Aggregate.Bytes()` encodes the proof alone, not its claims: send `XmssClaims()` and
+`SphincsClaims()` alongside it, or have the receiver rebuild the claims it expects.
+`AggregateFromBytes(bytes, xmssClaims, sphincsClaims)` verifies the proof against exactly those
+claims, given in any order with a repeated claim counted once, and rejects any other claim set.
+`AggregateSignatures` verifies every raw signature before proving, so every `Aggregate` is proven.
 `Setup` moves the one-time setup ahead of the first proof; calling it is optional.

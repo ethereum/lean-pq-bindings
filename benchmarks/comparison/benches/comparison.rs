@@ -24,9 +24,7 @@ fn single_operations(criterion: &mut Criterion) {
     let lean_key = &xmss::SecretKey::from_seed(
         lean_full_key_seed(0).expect("the full-key seed should be derivable"),
     );
-    let lean_signature = &lean_key
-        .sign(lean_message, LEAN_LEAF_INDEX)
-        .expect("full-key XMSS signing should succeed");
+    let lean_signature = &lean_key.sign(lean_message, LEAN_LEAF_INDEX);
     let lean_public_key = &lean_key.public_key();
     let bls_message = fixtures.bls_messages()[0];
     let bls_key = &fixtures.bls_keys()[0];
@@ -49,11 +47,7 @@ fn single_operations(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("sign");
     group.bench_function("lean", |bencher| {
         bencher.iter(|| {
-            black_box(
-                black_box(lean_key)
-                    .sign(black_box(lean_message), black_box(LEAN_LEAF_INDEX))
-                    .expect("full-key XMSS signing should succeed"),
-            )
+            black_box(black_box(lean_key).sign(black_box(lean_message), black_box(LEAN_LEAF_INDEX)))
         });
     });
     group.bench_function("lighthouse", |bencher| {

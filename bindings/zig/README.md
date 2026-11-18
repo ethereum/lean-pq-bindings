@@ -96,9 +96,16 @@ pub fn main() !void {
     var root = try lpq.Aggregate.create(&.{&leaf}, &.{}, &.{});
     defer root.deinit();
 
+    // The encoding is the proof alone; the receiver supplies the claims it expects.
     const encoded = try root.toBytes(allocator);
     defer allocator.free(encoded);
-    var received = try lpq.Aggregate.fromBytes(encoded);
+    var received = try lpq.Aggregate.fromBytes(encoded, &.{.{
+        .public_key = try xmss_key.publicKey(),
+        .message = message,
+    }}, &.{.{
+        .public_key = try sphincs_key.publicKey(),
+        .message = message,
+    }});
     defer received.deinit();
     const claims = try received.xmssClaims(allocator);
     defer allocator.free(claims);
@@ -114,8 +121,11 @@ leanXMSS keys are stateful: persist your own durable high-water leaf index along
 material: the leanXMSS or leanSPHINCS seed.
 
 `Aggregate.create` verifies every raw signature before proving and runs one proof at a time per
-process; one aggregation takes seconds and about 1.6 GB of memory. `Aggregate.fromBytes` verifies
-the proof it decodes, so every `Aggregate` value is proven. An aggregate attests the claims it
-lists, not the claims you wanted: compare `xmssClaims` and `sphincsClaims` against what you expect.
-`setup()` moves the one-time guest build ahead of the first proof; calling it is optional and
-idempotent.
+process; one aggregation takes seconds and about 1.6 GB of memory. `Aggregate.toBytes` encodes the
+proof alone, without its claims: send the claims alongside it, or let the receiver rebuild them.
+`Aggregate.fromBytes(data, xmss_claims, sphincs_claims)` verifies that the proof proves exactly
+those claims, in any order with a repeated claim counted once, and fails with `error.NativeFailure`
+for malformed bytes or any other claim set; so every `Aggregate` value is proven, and
+`xmssClaims` and `sphincsClaims` return the claims, strictly sorted, in the slice type
+`fromBytes` takes. `setup()` moves the one-time guest build ahead of the first proof; calling it
+is optional and idempotent.

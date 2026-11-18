@@ -72,9 +72,7 @@ type
     handle: ptr LpqAggregate
 
   LeanPqAggregate* = ref LeanPqAggregateObj
-    ## A verified proof that each listed public key signed its message. An aggregate attests the
-    ## claims it lists, not the claims you wanted: compare `xmssClaims` and `sphincsClaims`
-    ## against what you expect.
+    ## A verified proof that each listed public key signed its message.
 
 # The native records are these objects' bytes, so slices of them pass to the bridge as they are.
 static:
@@ -348,15 +346,31 @@ proc init*(
     return err("native aggregate is null")
   ok(LeanPqAggregate(handle: handle))
 
-proc fromBytes*(T: type LeanPqAggregate, bytes: openArray[byte]): Result[LeanPqAggregate, string] =
-  ## Decodes and verifies an aggregate: every `LeanPqAggregate` is proven.
+proc fromBytes*(
+    T: type LeanPqAggregate,
+    bytes: openArray[byte],
+    xmssClaims: openArray[LeanPqClaim] = [],
+    sphincsClaims: openArray[LeanPqClaim] = [],
+): Result[LeanPqAggregate, string] =
+  ## Decodes a proof from `toBytes` and verifies that it proves exactly `xmssClaims` and
+  ## `sphincsClaims`, in any order, a repeated claim counting once. The encoding holds no claims:
+  ## send them alongside the proof or rebuild them on the receiving side. Every
+  ## `LeanPqAggregate` is proven.
+  let
+    xmssPtr = if xmssClaims.len == 0: nil else: cast[ptr byte](addr xmssClaims[0])
+    sphincsPtr = if sphincsClaims.len == 0: nil else: cast[ptr byte](addr sphincsClaims[0])
   var handle: ptr LpqAggregate
-  ? check(lpqAggregateFromBytes(bytesPtr(bytes), csize_t(bytes.len), addr handle))
+  ? check(lpqAggregateFromBytes(
+    bytesPtr(bytes), csize_t(bytes.len),
+    xmssPtr, csize_t(xmssClaims.len),
+    sphincsPtr, csize_t(sphincsClaims.len),
+    addr handle))
   if handle.isNil:
     return err("native aggregate is null")
   ok(LeanPqAggregate(handle: handle))
 
 proc toBytes*(aggregate: LeanPqAggregate): Result[seq[byte], string] =
+  ## The proof alone, without its claims.
   let handle = ? aggregate.nativeHandle()
   var buffer: LpqBuffer
   ? check(lpqAggregateToBytes(handle, addr buffer))

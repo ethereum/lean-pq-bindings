@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::{bail, ensure, Context, Result};
 use lean_pq_comparison::{
-    ensure_distinct_output_paths, lean_fixture_signer, lean_full_key_seed, BenchmarkReport,
+    ensure_distinct_output_paths, lean_fixture_signers, lean_full_key_seed, BenchmarkReport,
     ComparisonReport, FixtureSet, LeanXmssClaim, LeanXmssInput, RecursiveAggregationReport,
     RunConfig, SampleSummary, KEY_CREATION_WORKLOAD, LIGHTHOUSE_REVISION, MIXED_CLAIM_SIGNATURES,
     RECURSIVE_CHILD_SIGNERS,
@@ -232,14 +232,14 @@ fn measure_recursive_aggregations(
     for child_index in 0..maximum_fan_in {
         let signer_range = recursive_signer_range(child_index)?;
         let child_claims_start = claims.len();
-        let mut inputs = Vec::with_capacity(RECURSIVE_CHILD_SIGNERS);
-        for signer_index in signer_range {
-            let input = lean_fixture_signer(signer_index, 0).with_context(|| {
-                format!("failed to create recursive fixture signer {signer_index}")
-            })?;
-            claims.push((input.0, input.1));
-            inputs.push(input);
-        }
+        let inputs = lean_fixture_signers(signer_range, |_| 0).with_context(|| {
+            format!("failed to create the fixture signers of recursive child proof {child_index}")
+        })?;
+        claims.extend(
+            inputs
+                .iter()
+                .map(|(public_key, message, _)| (*public_key, *message)),
+        );
 
         let child = lean_pq::aggregate(&[], &inputs, &[])
             .with_context(|| format!("failed to build recursive child proof {child_index}"))?;
@@ -319,7 +319,8 @@ fn sorted_claims(claims: &[LeanXmssClaim]) -> Vec<LeanXmssClaim> {
     sorted
 }
 
-/// Checks the claims a proven aggregate lists; the proof itself is already verified.
+/// Checks the claims a fresh proof lists; `lean_pq::aggregate` proves exactly its inputs, so
+/// this catches fixtures or inputs assembled wrongly.
 fn ensure_lean_claims(aggregate: &lean_pq::Aggregate, expected: &[LeanXmssClaim]) -> Result<()> {
     ensure!(
         aggregate.xmss_claims() == expected,
@@ -371,15 +372,13 @@ fn timed_lean_aggregate(
     Ok((duration, aggregate))
 }
 
-/// Times decoding and verifying one serialized LeanVM aggregate, then checks its claims
-/// outside the timed region.
+/// Times decoding one serialized LeanVM aggregate and verifying it against the expected
+/// claims; success is the check.
 fn timed_lean_verify(bytes: &[u8], expected: &[LeanXmssClaim]) -> Result<Duration> {
     let start = Instant::now();
-    let aggregate = lean_pq::Aggregate::from_bytes(bytes);
+    let aggregate = lean_pq::Aggregate::from_bytes(bytes, expected, &[]);
     let duration = start.elapsed();
-    let aggregate = aggregate.context("LeanVM verification failed")?;
-    ensure_lean_claims(&aggregate, expected)
-        .context("LeanVM aggregate failed the post-timing claim check")?;
+    aggregate.context("LeanVM verification against the expected claims failed")?;
     Ok(duration)
 }
 
@@ -1005,6 +1004,30 @@ mod tests {
         assert_eq!(recursive_signer_range(1).unwrap(), 512..1_024);
         assert_eq!(recursive_signer_range(15).unwrap(), 7_680..8_192);
         assert!(recursive_signer_range(usize::MAX).is_err());
+    }
+
+    #[test]
+    fn timed_verification_accepts_only_the_proven_claims() {
+        lean_pq::setup();
+        let fixtures = FixtureSet::distinct_claims(2).unwrap();
+        let expected = fixtures.lean_expected_claims();
+        let (_, aggregate) = timed_lean_aggregate(&fixtures.lean_inputs(), &expected).unwrap();
+        let bytes = aggregate.to_bytes();
+
+        let reversed = expected.iter().rev().copied().collect::<Vec<_>>();
+        assert!(timed_lean_verify(&bytes, &expected).is_ok());
+        assert!(timed_lean_verify(&bytes, &reversed).is_ok());
+
+        assert!(timed_lean_verify(&bytes, &expected[..1]).is_err());
+        let mut other_message = expected.clone();
+        other_message[0].1[0] ^= 1;
+        assert!(timed_lean_verify(&bytes, &other_message).is_err());
+
+        assert!(timed_lean_verify(&bytes[..bytes.len() - 1], &expected).is_err());
+        let mut tampered = bytes.clone();
+        let middle = tampered.len() / 2;
+        tampered[middle] ^= 1;
+        assert!(timed_lean_verify(&tampered, &expected).is_err());
     }
 
     #[test]

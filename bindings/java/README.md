@@ -178,11 +178,13 @@ leanXMSS seed or the 32-byte leanSPHINCS seed.
 ## Aggregation
 
 `LeanPq.aggregate(children, xmss, sphincs)` verifies every raw signature before proving, accepts
-at most 16 children, and runs one proof at a time per process. `Aggregate.fromBytes` verifies the
-proof it decodes and throws `LeanPqException` otherwise, so every `Aggregate` is proven. An
-aggregate attests the claims it lists, not the claims you wanted: compare `xmssClaims()` and
-`sphincsClaims()` against what you expect. `LeanPq.setup()` moves the one-time guest build ahead of
-the first proof; calling it is optional and idempotent.
+at most 16 children, and runs one proof at a time per process. `toBytes()` encodes the proof
+alone, as leanVM encodes it: send the claims alongside it, or let the receiver rebuild them, as
+Ethereum does from its validator bitfields. `Aggregate.fromBytes(bytes, xmssClaims, sphincsClaims)`
+verifies the proof against exactly the claims you pass, in any order (a repeated claim counts
+once), and throws `LeanPqException` for any other set of claims or bytes that are not a proof, so
+every `Aggregate` is proven. `LeanPq.setup()` moves the one-time guest build ahead of the first
+proof; calling it is optional and idempotent.
 
 ```java
 import java.util.List;
@@ -193,7 +195,11 @@ try (Aggregate leaf = LeanPq.aggregate(
          List.of(new SignedMessage(xmss.publicKey(), message32, xmss.sign(message32, 7))),
          List.of(new SignedMessage(sphincs.publicKey(), message32, sphincs.sign(message32))));
      Aggregate root = LeanPq.aggregate(List.of(leaf), List.of(), List.of());
-     Aggregate received = Aggregate.fromBytes(root.toBytes())) {
+     // The bytes are the proof alone: the receiver supplies the claims it expects.
+     Aggregate received = Aggregate.fromBytes(
+         root.toBytes(),
+         List.of(new SignatureClaim(xmss.publicKey(), message32)),
+         List.of(new SignatureClaim(sphincs.publicKey(), message32)))) {
     List<SignatureClaim> xmssClaims = received.xmssClaims();
     List<SignatureClaim> sphincsClaims = received.sphincsClaims();
 }

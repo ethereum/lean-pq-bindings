@@ -84,13 +84,20 @@ root = lpq.aggregate(
     xmss=[(xmss_key.public_key, second, xmss_key.sign(second, 1))],
 )
 
-received = lpq.Aggregate.from_bytes(root.to_bytes())  # decodes and verifies
+# The encoding is the proof alone: send the claims alongside it, or let the
+# receiver rebuild the claims it expects.
+proof = root.to_bytes()
+received = lpq.Aggregate.from_bytes(proof, root.xmss_claims, root.sphincs_claims)
 assert received.sphincs_claims == [(sphincs_key.public_key, second)]
 ```
 
-Every `Aggregate` value has been proven or verified. It attests the claims it
-lists, not the claims you wanted: compare `xmss_claims` and `sphincs_claims`
-(sorted lists of `(public_key, message)`) against what you expect.
+Every `Aggregate` value has been proven or verified. `to_bytes()` encodes only
+the proof, not the claims. `Aggregate.from_bytes(data, xmss_claims=(),
+sphincs_claims=())` takes the `(public_key, message)` pairs the receiver
+expects and verifies the proof against exactly them: they may come in any
+order and a duplicate counts once, but a proof of any other claim set raises
+`LeanPqError`. `xmss_claims` and `sphincs_claims` return the claims as sorted
+lists of `(public_key, message)` tuples.
 
 `aggregate` and `Aggregate.from_bytes` build the aggregation guest on first
 use; call `setup()` to pay that cost earlier. It is safe to call repeatedly.

@@ -36,11 +36,25 @@ fn uint32(value: f64, what: &str) -> Result<u32> {
     }
 }
 
-/// A `(public key, message)` pair an aggregate attests.
+/// A `(public key, message)` pair an aggregate proves.
 #[napi(object)]
 pub struct Claim {
     pub public_key: Buffer,
     pub message: Buffer,
+}
+
+struct RawClaim {
+    public_key: Vec<u8>,
+    message: Vec<u8>,
+}
+
+impl From<Claim> for RawClaim {
+    fn from(claim: Claim) -> Self {
+        Self {
+            public_key: claim.public_key.to_vec(),
+            message: claim.message.to_vec(),
+        }
+    }
 }
 
 /// A raw signature to aggregate.
@@ -222,9 +236,8 @@ impl Task for XmssPrepareTask {
     type JsValue = ();
 
     fn compute(&mut self) -> Result<Self::Output> {
-        self.key
-            .prepare(uint32(self.leaf_index, "leaf index")?)
-            .map_err(api_error)
+        self.key.prepare(uint32(self.leaf_index, "leaf index")?);
+        Ok(())
     }
 
     fn resolve(&mut self, _: Env, output: Self::Output) -> Result<Self::JsValue> {
@@ -245,7 +258,7 @@ impl Task for XmssSignTask {
     fn compute(&mut self) -> Result<Self::Output> {
         let message = to_message(&self.message)?;
         let leaf_index = uint32(self.leaf_index, "leaf index")?;
-        let signature = self.key.sign(&message, leaf_index).map_err(api_error)?;
+        let signature = self.key.sign(&message, leaf_index);
         Ok(signature.to_bytes().to_vec())
     }
 
@@ -297,10 +310,7 @@ impl Task for SphincsSignTask {
     type JsValue = Buffer;
 
     fn compute(&mut self) -> Result<Self::Output> {
-        let signature = self
-            .key
-            .sign(&to_message(&self.message)?)
-            .map_err(api_error)?;
+        let signature = self.key.sign(&to_message(&self.message)?);
         Ok(signature.to_bytes().to_vec())
     }
 
@@ -311,6 +321,8 @@ impl Task for SphincsSignTask {
 
 pub struct AggregateFromBytesTask {
     data: Vec<u8>,
+    xmss: Vec<RawClaim>,
+    sphincs: Vec<RawClaim>,
 }
 
 impl Task for AggregateFromBytesTask {
@@ -318,7 +330,27 @@ impl Task for AggregateFromBytesTask {
     type JsValue = Aggregate;
 
     fn compute(&mut self) -> Result<Self::Output> {
-        lean_pq::Aggregate::from_bytes(&self.data).map_err(api_error)
+        let xmss = self
+            .xmss
+            .iter()
+            .map(|claim| {
+                Ok((
+                    xmss::PublicKey::from_bytes(&claim.public_key).map_err(api_error)?,
+                    to_message(&claim.message)?,
+                ))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let sphincs = self
+            .sphincs
+            .iter()
+            .map(|claim| {
+                Ok((
+                    sphincs::PublicKey::from_bytes(&claim.public_key).map_err(api_error)?,
+                    to_message(&claim.message)?,
+                ))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        lean_pq::Aggregate::from_bytes(&self.data, &xmss, &sphincs).map_err(api_error)
     }
 
     fn resolve(&mut self, _: Env, output: Self::Output) -> Result<Self::JsValue> {
@@ -438,9 +470,15 @@ pub fn sphincs_verify(public_key: Buffer, message: Buffer, signature: Buffer) ->
 }
 
 #[napi(ts_return_type = "Promise<Aggregate>")]
-pub fn aggregate_from_bytes(data: Buffer) -> AsyncTask<AggregateFromBytesTask> {
+pub fn aggregate_from_bytes(
+    data: Buffer,
+    xmss: Vec<Claim>,
+    sphincs: Vec<Claim>,
+) -> AsyncTask<AggregateFromBytesTask> {
     AsyncTask::new(AggregateFromBytesTask {
         data: data.to_vec(),
+        xmss: xmss.into_iter().map(RawClaim::from).collect(),
+        sphincs: sphincs.into_iter().map(RawClaim::from).collect(),
     })
 }
 

@@ -55,14 +55,43 @@ test('aggregates both schemes recursively', async () => {
     xmss: [{ publicKey: xmssKey.publicKey, message: second, signature: await xmssKey.sign(second, 1) }],
   })
 
-  const received = await lpq.Aggregate.fromBytes(root.toBytes())
-  assert.deepEqual(received.xmssClaims, [
+  const xmssClaims = [
     { publicKey: xmssKey.publicKey, message: first },
     { publicKey: xmssKey.publicKey, message: second },
-  ])
-  assert.deepEqual(received.sphincsClaims, [{ publicKey: sphincsKey.publicKey, message: first }])
+  ]
+  const sphincsClaims = [{ publicKey: sphincsKey.publicKey, message: first }]
+  assert.deepEqual(root.xmssClaims, xmssClaims)
+  assert.deepEqual(root.sphincsClaims, sphincsClaims)
 
-  const tampered = root.toBytes()
+  const proof = root.toBytes()
+  const received = await lpq.Aggregate.fromBytes(proof, { xmss: xmssClaims, sphincs: sphincsClaims })
+  assert.deepEqual(received.xmssClaims, xmssClaims)
+  assert.deepEqual(received.sphincsClaims, sphincsClaims)
+  assert.deepEqual(received.toBytes(), proof)
+
+  // Claims may come in any order, and a repeated claim counts once.
+  const reordered = await lpq.Aggregate.fromBytes(proof, {
+    xmss: [xmssClaims[1], xmssClaims[0], xmssClaims[1]],
+    sphincs: sphincsClaims,
+  })
+  assert.deepEqual(reordered.xmssClaims, xmssClaims)
+
+  const rejected = /does not prove the given claims/
+  await assert.rejects(lpq.Aggregate.fromBytes(proof, { xmss: xmssClaims }), rejected)
+  await assert.rejects(lpq.Aggregate.fromBytes(proof, { xmss: xmssClaims.slice(1), sphincs: sphincsClaims }), rejected)
+  await assert.rejects(
+    lpq.Aggregate.fromBytes(proof, {
+      xmss: xmssClaims,
+      sphincs: [{ publicKey: sphincsKey.publicKey, message: second }],
+    }),
+    rejected,
+  )
+
+  const tampered = Buffer.from(proof)
   tampered[tampered.length - 1] ^= 1
-  await assert.rejects(lpq.Aggregate.fromBytes(tampered), /invalid aggregate/)
+  await assert.rejects(lpq.Aggregate.fromBytes(tampered, { xmss: xmssClaims, sphincs: sphincsClaims }))
+  await assert.rejects(
+    lpq.Aggregate.fromBytes(proof.subarray(0, proof.length - 1), { xmss: xmssClaims, sphincs: sphincsClaims }),
+    /malformed aggregate/,
+  )
 })

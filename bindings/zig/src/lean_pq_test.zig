@@ -78,31 +78,50 @@ test "aggregates recursively and round trips through bytes" {
 
     const encoded = try root.toBytes(allocator);
     defer allocator.free(encoded);
-    var restored = try lpq.Aggregate.fromBytes(encoded);
+
+    const xmss_claim: lpq.Claim = .{ .public_key = xmss_public_key, .message = message };
+    const extra_claim: lpq.Claim = .{ .public_key = extra_public_key, .message = other_message };
+    const sphincs_claim: lpq.Claim = .{ .public_key = sphincs_public_key, .message = message };
+
+    // The receiver lists the claims in any order; a repeated claim counts once.
+    var restored = try lpq.Aggregate.fromBytes(encoded, &.{ extra_claim, xmss_claim, extra_claim }, &.{sphincs_claim});
     defer restored.deinit();
 
-    var expected_xmss = [_]lpq.Claim{
-        .{ .public_key = xmss_public_key, .message = message },
-        .{ .public_key = extra_public_key, .message = other_message },
-    };
+    var expected_xmss = [_]lpq.Claim{ xmss_claim, extra_claim };
     std.mem.sortUnstable(lpq.Claim, &expected_xmss, {}, claimLessThan);
     const xmss_claims = try restored.xmssClaims(allocator);
     defer allocator.free(xmss_claims);
-    std.mem.sortUnstable(lpq.Claim, xmss_claims, {}, claimLessThan);
     try std.testing.expectEqualSlices(lpq.Claim, &expected_xmss, xmss_claims);
 
     const sphincs_claims = try restored.sphincsClaims(allocator);
     defer allocator.free(sphincs_claims);
-    try std.testing.expectEqualSlices(
-        lpq.Claim,
-        &.{.{ .public_key = sphincs_public_key, .message = message }},
-        sphincs_claims,
-    );
+    try std.testing.expectEqualSlices(lpq.Claim, &.{sphincs_claim}, sphincs_claims);
+
+    // The getters' claims are exactly what decoding needs.
+    var reread = try lpq.Aggregate.fromBytes(encoded, xmss_claims, sphincs_claims);
+    defer reread.deinit();
+    const reencoded = try reread.toBytes(allocator);
+    defer allocator.free(reencoded);
+    try std.testing.expectEqualSlices(u8, encoded, reencoded);
+
+    // The same proof does not prove any other claim set.
+    const other_sphincs_claim: lpq.Claim = .{ .public_key = sphincs_public_key, .message = other_message };
+    try std.testing.expectError(error.NativeFailure, lpq.Aggregate.fromBytes(encoded, &.{xmss_claim}, &.{sphincs_claim}));
+    try std.testing.expectError(error.NativeFailure, lpq.Aggregate.fromBytes(encoded, &.{ xmss_claim, extra_claim }, &.{}));
+    try std.testing.expectError(error.NativeFailure, lpq.Aggregate.fromBytes(encoded, &.{ xmss_claim, extra_claim }, &.{other_sphincs_claim}));
+    try std.testing.expectError(error.NativeFailure, lpq.Aggregate.fromBytes(encoded, &.{ xmss_claim, extra_claim }, &.{ sphincs_claim, other_sphincs_claim }));
+    try std.testing.expectError(error.NativeFailure, lpq.Aggregate.fromBytes(encoded, &.{ xmss_claim, extra_claim, sphincs_claim }, &.{sphincs_claim}));
 
     const tampered = try allocator.dupe(u8, encoded);
     defer allocator.free(tampered);
     tampered[tampered.len / 2] ^= 1;
-    try std.testing.expectError(error.NativeFailure, lpq.Aggregate.fromBytes(tampered));
+    try std.testing.expectError(error.NativeFailure, lpq.Aggregate.fromBytes(tampered, &.{ xmss_claim, extra_claim }, &.{sphincs_claim}));
+    try std.testing.expectError(error.NativeFailure, lpq.Aggregate.fromBytes(encoded[0 .. encoded.len - 1], &.{ xmss_claim, extra_claim }, &.{sphincs_claim}));
+    try std.testing.expectError(error.NativeFailure, lpq.Aggregate.fromBytes(&.{}, &.{ xmss_claim, extra_claim }, &.{sphincs_claim}));
+}
+
+test "aggregating nothing fails" {
+    try std.testing.expectError(error.NativeFailure, lpq.Aggregate.create(&.{}, &.{}, &.{}));
 }
 
 fn claimLessThan(_: void, a: lpq.Claim, b: lpq.Claim) bool {

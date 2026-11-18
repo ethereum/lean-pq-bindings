@@ -139,18 +139,42 @@ suite "lean_pq":
         signature: extraKey.sign(otherMessage, 0).expect("signature"))]).expect("root")
 
     let
-      encoded = root.toBytes().expect("bytes")
-      restored = LeanPqAggregate.fromBytes(encoded).expect("restored")
-    check:
-      restored.xmssClaims().expect("claims") == sortedClaims([
+      expectedXmss = [
         LeanPqClaim(publicKey: xmssPublicKey, message: message),
-        LeanPqClaim(publicKey: extraPublicKey, message: otherMessage)])
-      restored.sphincsClaims().expect("claims") ==
-        @[LeanPqClaim(publicKey: sphincsPublicKey, message: message)]
+        LeanPqClaim(publicKey: extraPublicKey, message: otherMessage)]
+      expectedSphincs = [LeanPqClaim(publicKey: sphincsPublicKey, message: message)]
+      encoded = root.toBytes().expect("bytes")
+      restored = LeanPqAggregate.fromBytes(
+        encoded, root.xmssClaims().expect("claims"), root.sphincsClaims().expect("claims")
+      ).expect("restored")
+    check:
+      restored.xmssClaims().expect("claims") == sortedClaims(expectedXmss)
+      restored.sphincsClaims().expect("claims") == @expectedSphincs
+      restored.toBytes().expect("bytes") == encoded
+
+    # Claims in any order, a repeated claim counting once.
+    let reordered = LeanPqAggregate.fromBytes(
+      encoded, [expectedXmss[1], expectedXmss[0], expectedXmss[1]], expectedSphincs
+    ).expect("reordered")
+    check reordered.xmssClaims().expect("claims") == sortedClaims(expectedXmss)
+
+    # The proof attests exactly its claims: one short, one extra or another message fails.
+    check:
+      LeanPqAggregate.fromBytes(encoded, [expectedXmss[0]], expectedSphincs).isErr()
+      LeanPqAggregate.fromBytes(encoded, expectedXmss).isErr()
+      LeanPqAggregate.fromBytes(encoded, expectedXmss, [
+        expectedSphincs[0],
+        LeanPqClaim(publicKey: sphincsPublicKey, message: otherMessage)]).isErr()
+      LeanPqAggregate.fromBytes(encoded, expectedXmss, [
+        LeanPqClaim(publicKey: sphincsPublicKey, message: otherMessage)]).isErr()
+      LeanPqAggregate.fromBytes(encoded, expectedSphincs, expectedXmss).isErr()
 
     var tampered = encoded
     tampered[tampered.len div 2] = tampered[tampered.len div 2] xor 1
-    check LeanPqAggregate.fromBytes(tampered).isErr()
+    check:
+      LeanPqAggregate.fromBytes(tampered, expectedXmss, expectedSphincs).isErr()
+      LeanPqAggregate.fromBytes(
+        encoded.toOpenArray(0, encoded.len - 2), expectedXmss, expectedSphincs).isErr()
 
     restored.close()
     check:

@@ -12,6 +12,8 @@ builds and release packaging.
 
 The bridge's byte encodings are likewise private: raw-signature inputs to `lpq_aggregate_create` are
 concatenated fixed-width `public key (32) | message (32) | signature` records (2468 bytes for
-leanXMSS, 7804 for leanSPHINCS), and claims come back as concatenated 64-byte
-`public key | message` records. Language wrappers use them only to talk to the bridge; they are
-not public serialization formats.
+leanXMSS, 7804 for leanSPHINCS), and claims, both those `lpq_aggregate_from_bytes` checks a proof
+against and those the claim getters return, are concatenated 64-byte `public key | message`
+records. Language wrappers use them only to talk to the bridge; they are not public serialization
+formats. The one public encoding is an aggregate's: `lpq_aggregate_to_bytes` returns leanVM's own
+proof encoding, which carries no claims.
