@@ -1662,7 +1662,7 @@ checksum = "a4933f3f57a8e9d9da04db23fb153356ecaf00cbd14aee46279c33dc80925c37"
 
 [[package]]
 name = "lean-pq"
-version = "0.10.1"
+version = "0.11.0"
 dependencies = [
  "getrandom 0.3.4",
  "lean_sphincs",
@@ -1674,7 +1674,7 @@ dependencies = [
 
 [[package]]
 name = "lean-pq-comparison"
-version = "0.10.1"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "bls",
@@ -1687,14 +1687,14 @@ dependencies = [
 
 [[package]]
 name = "lean-pq-native"
-version = "0.10.1"
+version = "0.11.0"
 dependencies = [
  "lean-pq",
 ]
 
 [[package]]
 name = "lean-pq-node"
-version = "0.10.1"
+version = "0.11.0"
 dependencies = [
  "lean-pq",
  "napi",
@@ -2095,7 +2095,7 @@ dependencies = [
 
 [[package]]
 name = "py-lean-pq"
-version = "0.10.1"
+version = "0.11.0"
 dependencies = [
  "lean-pq",
  "pyo3",
