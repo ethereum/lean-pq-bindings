@@ -83,13 +83,15 @@ public final class Main {
             check(LeanPq.sphincsVerify(sphincs.publicKey(), message, sphincsSignature), "leanSPHINCS signature must verify");
             check(!LeanPq.sphincsVerify(sphincs.publicKey(), other, sphincsSignature), "leanSPHINCS signature must not verify another message");
 
+            List<SignatureClaim> xmssClaims = List.of(new SignatureClaim(xmss.publicKey(), message));
+            List<SignatureClaim> sphincsClaims = List.of(new SignatureClaim(sphincs.publicKey(), message));
             try (Aggregate aggregate = LeanPq.aggregate(
                      List.of(),
                      List.of(new SignedMessage(xmss.publicKey(), message, xmssSignature)),
                      List.of(new SignedMessage(sphincs.publicKey(), message, sphincsSignature)));
-                 Aggregate received = Aggregate.fromBytes(aggregate.toBytes())) {
-                check(received.xmssClaims().equals(List.of(new SignatureClaim(xmss.publicKey(), message))), "aggregate must attest the leanXMSS claim");
-                check(received.sphincsClaims().equals(List.of(new SignatureClaim(sphincs.publicKey(), message))), "aggregate must attest the leanSPHINCS claim");
+                 Aggregate received = Aggregate.fromBytes(aggregate.toBytes(), xmssClaims, sphincsClaims)) {
+                check(received.xmssClaims().equals(xmssClaims), "aggregate must attest the leanXMSS claim");
+                check(received.sphincsClaims().equals(sphincsClaims), "aggregate must attest the leanSPHINCS claim");
             }
         }
 

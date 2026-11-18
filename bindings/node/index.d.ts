@@ -23,9 +23,9 @@ export declare class XmssSecretKey {
 
 export declare function aggregate(children: Array<Aggregate>, xmss: Array<SignedMessage>, sphincs: Array<SignedMessage>): Promise<Aggregate>
 
-export declare function aggregateFromBytes(data: Buffer): Promise<Aggregate>
+export declare function aggregateFromBytes(data: Buffer, xmss: Array<Claim>, sphincs: Array<Claim>): Promise<Aggregate>
 
-/** A `(public key, message)` pair an aggregate attests. */
+/** A `(public key, message)` pair an aggregate proves. */
 export interface Claim {
   publicKey: Buffer
   message: Buffer

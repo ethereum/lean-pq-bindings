@@ -57,15 +57,19 @@ lpq.sphincsVerify(sphincsKey.publicKey, message, sphincsSignature)
 Persist your own durable high-water leaf index alongside a leanXMSS key's `toBytes()` and advance
 it before publishing a signature. `toBytes()` is secret material: the key's 32-byte seed.
 `XmssSecretKey.prepare(leafIndex)` builds the bottom tree a leaf index falls in ahead of signing
-there.
+there; a key keeps the 8 bottom trees it used last.
 
 ## Aggregation
 
 `aggregate` verifies every raw signature before proving and runs one proof at a time per process.
-`Aggregate.fromBytes` verifies the proof it decodes, so every `Aggregate` is proven. An aggregate
-attests the claims it lists, not the claims you wanted: compare `xmssClaims` and `sphincsClaims`
-against what you expect. `setup()` moves the one-time guest build ahead of the first proof;
-calling it is optional and idempotent.
+`setup()` moves the one-time guest build ahead of the first proof; calling it is optional and
+idempotent.
+
+An aggregate's encoding is the proof alone, without its claims: send the claims alongside it, or
+let the receiver rebuild them. `Aggregate.fromBytes(data, { xmss, sphincs })` verifies the proof
+against exactly the claims you give it and rejects any other claim set, so every `Aggregate` is
+proven. The claims may come in any order, a repeated claim counts once, and an omitted list means
+no claims of that scheme.
 
 ```js
 const leaf = await lpq.aggregate({
@@ -74,7 +78,10 @@ const leaf = await lpq.aggregate({
 })
 const root = await lpq.aggregate({ children: [leaf] })
 
-const received = await lpq.Aggregate.fromBytes(root.toBytes())
+const received = await lpq.Aggregate.fromBytes(root.toBytes(), {
+  xmss: [{ publicKey: xmssKey.publicKey, message }],
+  sphincs: [{ publicKey: sphincsKey.publicKey, message }],
+})
 received.xmssClaims // [{ publicKey: xmssKey.publicKey, message }]
 received.sphincsClaims // [{ publicKey: sphincsKey.publicKey, message }]
 ```

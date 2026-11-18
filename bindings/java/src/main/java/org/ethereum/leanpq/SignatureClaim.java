@@ -21,6 +21,12 @@ public final class SignatureClaim {
         return message.clone();
     }
 
+    /** Writes this claim's 64-byte {@code pk|msg} record at {@code offset}. */
+    void writeRecord(byte[] records, int offset) {
+        System.arraycopy(publicKey, 0, records, offset, publicKey.length);
+        System.arraycopy(message, 0, records, offset + publicKey.length, message.length);
+    }
+
     @Override
     public boolean equals(Object other) {
         return other instanceof SignatureClaim that

@@ -49,7 +49,12 @@ class SphincsSecretKey:
 @final
 class Aggregate:
     @classmethod
-    def from_bytes(cls, data: bytes) -> "Aggregate": ...
+    def from_bytes(
+        cls,
+        data: bytes,
+        xmss_claims: Sequence[tuple[bytes, bytes]] = (),
+        sphincs_claims: Sequence[tuple[bytes, bytes]] = (),
+    ) -> "Aggregate": ...
     def to_bytes(self) -> bytes: ...
     @property
     def xmss_claims(self) -> list[tuple[bytes, bytes]]: ...

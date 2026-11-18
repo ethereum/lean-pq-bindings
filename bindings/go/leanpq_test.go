@@ -149,13 +149,24 @@ func TestAggregateRecursively(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	received, err := AggregateFromBytes(encoded)
+	expectedXmss := []Claim{{xmssPublicKey, first}, {xmssPublicKey, second}}
+	expectedSphincs := []Claim{{sphincsPublicKey, first}}
+	rootXmss, err := root.XmssClaims()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(rootXmss, expectedXmss) {
+		t.Fatalf("root leanXMSS claims = %x, want %x", rootXmss, expectedXmss)
+	}
+
+	// The receiver rebuilds the claims in any order; a repeated claim counts once.
+	received, err := AggregateFromBytes(
+		encoded, []Claim{{xmssPublicKey, second}, {xmssPublicKey, first}, {xmssPublicKey, second}}, expectedSphincs,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer received.Close()
-
-	expectedXmss := []Claim{{xmssPublicKey, first}, {xmssPublicKey, second}}
 	xmssClaims, err := received.XmssClaims()
 	if err != nil {
 		t.Fatal(err)
@@ -167,14 +178,52 @@ func TestAggregateRecursively(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if expected := []Claim{{sphincsPublicKey, first}}; !reflect.DeepEqual(sphincsClaims, expected) {
-		t.Fatalf("leanSPHINCS claims = %x, want %x", sphincsClaims, expected)
+	if !reflect.DeepEqual(sphincsClaims, expectedSphincs) {
+		t.Fatalf("leanSPHINCS claims = %x, want %x", sphincsClaims, expectedSphincs)
 	}
 
-	encoded[len(encoded)-1] ^= 1
-	if tampered, err := AggregateFromBytes(encoded); err == nil {
-		tampered.Close()
+	reencoded, err := received.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	roundTrip, err := AggregateFromBytes(reencoded, xmssClaims, sphincsClaims)
+	if err != nil {
+		t.Fatalf("an aggregate must decode against its own claims: %v", err)
+	}
+	roundTrip.Close()
+
+	wrongClaims := []struct {
+		name    string
+		xmss    []Claim
+		sphincs []Claim
+	}{
+		{"one leanXMSS claim short", expectedXmss[:1], expectedSphincs},
+		{"no leanSPHINCS claim", expectedXmss, nil},
+		{"another leanXMSS message", []Claim{{xmssPublicKey, first}, {xmssPublicKey, bytes32(0x33)}}, expectedSphincs},
+		{"an extra leanSPHINCS claim", expectedXmss, []Claim{{sphincsPublicKey, first}, {sphincsPublicKey, second}}},
+		{"claims of the wrong scheme", expectedSphincs, expectedXmss},
+	}
+	for _, claims := range wrongClaims {
+		if wrong, err := AggregateFromBytes(encoded, claims.xmss, claims.sphincs); err == nil {
+			wrong.Close()
+			t.Fatalf("the proof must be rejected against %s", claims.name)
+		}
+	}
+
+	truncated := encoded[:len(encoded)-1]
+	if wrong, err := AggregateFromBytes(truncated, expectedXmss, expectedSphincs); err == nil {
+		wrong.Close()
+		t.Fatal("truncated aggregate bytes must be rejected")
+	}
+	tampered := append([]byte(nil), encoded...)
+	tampered[len(tampered)/2] ^= 1
+	if wrong, err := AggregateFromBytes(tampered, expectedXmss, expectedSphincs); err == nil {
+		wrong.Close()
 		t.Fatal("tampered aggregate bytes must be rejected")
+	}
+	if wrong, err := AggregateFromBytes(nil, expectedXmss, expectedSphincs); err == nil {
+		wrong.Close()
+		t.Fatal("empty aggregate bytes must be rejected")
 	}
 }
 

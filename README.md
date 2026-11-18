@@ -5,6 +5,10 @@ stateful **leanXMSS**, stateless **leanSPHINCS**, and zkVM-backed recursive aggr
 one proof. Every binding wraps the safe Rust facade in [`bindings/rust`](bindings/rust/README.md),
 which pins leanVM by git revision and keeps the proving parameters internal.
 
+An encoded aggregate is leanVM's proof alone. Its claims, the (public key, message) pairs it proves,
+travel separately: a receiver decodes the proof together with the claims it expects, and decoding
+fails unless the proof proves exactly those.
+
 ## Install
 
 Every package is released together from one version: each `vX.Y.Z` release publishes all of them

@@ -149,22 +149,45 @@ fn native_abi_signs_verifies_and_aggregates() {
             let aggregate_bytes = take(buffer);
             lpq_aggregate_destroy(aggregate);
 
+            // Decoding takes the claims the proof must prove, as 64-byte records.
+            let xmss_claim = [&xmss_pk[..], &message].concat();
+            let sphincs_claim = [&sphincs_pk[..], &message].concat();
             let mut decoded = ptr::null_mut();
             assert_eq!(
                 lpq_aggregate_from_bytes(
                     aggregate_bytes.as_ptr(),
                     aggregate_bytes.len(),
+                    xmss_claim.as_ptr(),
+                    1,
+                    sphincs_claim.as_ptr(),
+                    1,
                     &mut decoded
                 ),
                 OK
             );
             let mut buffer = LpqBuffer::default();
             assert_eq!(lpq_aggregate_xmss_claims(decoded, &mut buffer), OK);
-            assert_eq!(take(buffer), [&xmss_pk[..], &message].concat());
+            assert_eq!(take(buffer), xmss_claim);
             let mut buffer = LpqBuffer::default();
             assert_eq!(lpq_aggregate_sphincs_claims(decoded, &mut buffer), OK);
-            assert_eq!(take(buffer), [&sphincs_pk[..], &message].concat());
+            assert_eq!(take(buffer), sphincs_claim);
             lpq_aggregate_destroy(decoded);
+
+            // The same proof against one claim short fails, and leaves no handle.
+            let mut rejected = ptr::null_mut();
+            assert_eq!(
+                lpq_aggregate_from_bytes(
+                    aggregate_bytes.as_ptr(),
+                    aggregate_bytes.len(),
+                    xmss_claim.as_ptr(),
+                    1,
+                    ptr::null(),
+                    0,
+                    &mut rejected
+                ),
+                ERROR
+            );
+            assert!(rejected.is_null());
         })
         .expect("test thread starts")
         .join()

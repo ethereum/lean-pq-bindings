@@ -3,6 +3,26 @@
 version = 4
 
 [[package]]
+name = "aggregation"
+version = "0.1.0"
+source = "git+https://github.com/leanEthereum/leanVM.git?rev=283686575c4e81790591d2c6e3ed21c69c0e3bbe#283686575c4e81790591d2c6e3ed21c69c0e3bbe"
+dependencies = [
+ "claims",
+ "fiat_shamir_prover",
+ "isa",
+ "keccak256",
+ "lean_da",
+ "lean_sphincs",
+ "lean_xmss",
+ "stable_lean_vm_core",
+ "stable_pcs",
+ "stable_primitives",
+ "tracing",
+ "verifier",
+ "zkdsl_compiler",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -392,15 +412,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
-name = "bincode"
-version = "1.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1f45e9417d87227c7a56d22e471c6206462cba514c7590c09aff4cf6d1ddcad"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "bitcoin-consensus-encoding"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -615,6 +626,15 @@ checksum = "57663b653d948a338bfb3eeba9bb2fd5fcfaecb9e199e87e1eda4d9e8b240fd9"
 dependencies = [
  "ciborium-io",
  "half",
+]
+
+[[package]]
+name = "claims"
+version = "0.1.0"
+source = "git+https://github.com/leanEthereum/leanVM.git?rev=283686575c4e81790591d2c6e3ed21c69c0e3bbe#283686575c4e81790591d2c6e3ed21c69c0e3bbe"
+dependencies = [
+ "lean_sphincs",
+ "lean_xmss",
 ]
 
 [[package]]
@@ -1123,12 +1143,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "fiat_shamir"
+name = "fiat_shamir_prover"
 version = "0.1.0"
-source = "git+https://github.com/leanEthereum/leanVM.git?rev=5e3ade21d339a45e1b3b0dba97ad9300ab50e49b#5e3ade21d339a45e1b3b0dba97ad9300ab50e49b"
+source = "git+https://github.com/leanEthereum/leanVM.git?rev=283686575c4e81790591d2c6e3ed21c69c0e3bbe#283686575c4e81790591d2c6e3ed21c69c0e3bbe"
 dependencies = [
- "parallel",
- "primitives",
+ "keccak256",
+ "verifier",
 ]
 
 [[package]]
@@ -1481,6 +1501,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "isa"
+version = "0.1.0"
+source = "git+https://github.com/leanEthereum/leanVM.git?rev=283686575c4e81790591d2c6e3ed21c69c0e3bbe#283686575c4e81790591d2c6e3ed21c69c0e3bbe"
+dependencies = [
+ "verifier",
+]
+
+[[package]]
 name = "itertools"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1613,16 +1641,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "keccak_gkr"
+name = "keccak256"
 version = "0.1.0"
-source = "git+https://github.com/leanEthereum/leanVM.git?rev=5e3ade21d339a45e1b3b0dba97ad9300ab50e49b#5e3ade21d339a45e1b3b0dba97ad9300ab50e49b"
-dependencies = [
- "fiat_shamir",
- "parallel",
- "pcs",
- "primitives",
- "tracing",
-]
+source = "git+https://github.com/leanEthereum/leanVM.git?rev=283686575c4e81790591d2c6e3ed21c69c0e3bbe#283686575c4e81790591d2c6e3ed21c69c0e3bbe"
 
 [[package]]
 name = "konst"
@@ -1643,9 +1664,11 @@ checksum = "a4933f3f57a8e9d9da04db23fb153356ecaf00cbd14aee46279c33dc80925c37"
 name = "lean-pq"
 version = "0.10.1"
 dependencies = [
- "leanvm",
+ "getrandom 0.3.4",
+ "lean_sphincs",
+ "lean_vm",
+ "lean_xmss",
  "proptest",
- "signatures",
  "thiserror",
 ]
 
@@ -1660,7 +1683,6 @@ dependencies = [
  "same-file",
  "serde",
  "serde_json",
- "signatures",
 ]
 
 [[package]]
@@ -1681,49 +1703,46 @@ dependencies = [
 ]
 
 [[package]]
-name = "lean_compiler"
-version = "0.1.0"
-source = "git+https://github.com/leanEthereum/leanVM.git?rev=5e3ade21d339a45e1b3b0dba97ad9300ab50e49b#5e3ade21d339a45e1b3b0dba97ad9300ab50e49b"
-dependencies = [
- "leanvm_core",
- "primitives",
-]
-
-[[package]]
 name = "lean_da"
 version = "0.1.0"
-source = "git+https://github.com/leanEthereum/leanVM.git?rev=5e3ade21d339a45e1b3b0dba97ad9300ab50e49b#5e3ade21d339a45e1b3b0dba97ad9300ab50e49b"
+source = "git+https://github.com/leanEthereum/leanVM.git?rev=283686575c4e81790591d2c6e3ed21c69c0e3bbe#283686575c4e81790591d2c6e3ed21c69c0e3bbe"
 dependencies = [
- "fiat_shamir",
- "parallel",
- "pcs",
- "primitives",
- "tracing",
-]
-
-[[package]]
-name = "leanvm"
-version = "0.1.0"
-source = "git+https://github.com/leanEthereum/leanVM.git?rev=5e3ade21d339a45e1b3b0dba97ad9300ab50e49b#5e3ade21d339a45e1b3b0dba97ad9300ab50e49b"
-dependencies = [
- "lean_da",
- "leanvm_core",
- "rec_aggregation",
- "signatures",
-]
-
-[[package]]
-name = "leanvm_core"
-version = "0.1.0"
-source = "git+https://github.com/leanEthereum/leanVM.git?rev=5e3ade21d339a45e1b3b0dba97ad9300ab50e49b#5e3ade21d339a45e1b3b0dba97ad9300ab50e49b"
-dependencies = [
- "fiat_shamir",
- "keccak_gkr",
- "parallel",
- "pcs",
- "primitives",
+ "keccak256",
+ "stable_pcs",
+ "stable_primitives",
  "tracing",
  "verifier",
+]
+
+[[package]]
+name = "lean_sphincs"
+version = "0.1.0"
+source = "git+https://github.com/leanEthereum/leanVM.git?rev=283686575c4e81790591d2c6e3ed21c69c0e3bbe#283686575c4e81790591d2c6e3ed21c69c0e3bbe"
+dependencies = [
+ "keccak256",
+]
+
+[[package]]
+name = "lean_vm"
+version = "0.1.0"
+source = "git+https://github.com/leanEthereum/leanVM.git?rev=283686575c4e81790591d2c6e3ed21c69c0e3bbe#283686575c4e81790591d2c6e3ed21c69c0e3bbe"
+dependencies = [
+ "aggregation",
+ "claims",
+ "isa",
+ "lean_da",
+ "lean_sphincs",
+ "lean_xmss",
+ "stable_lean_vm_core",
+ "verifier",
+]
+
+[[package]]
+name = "lean_xmss"
+version = "0.1.0"
+source = "git+https://github.com/leanEthereum/leanVM.git?rev=283686575c4e81790591d2c6e3ed21c69c0e3bbe#283686575c4e81790591d2c6e3ed21c69c0e3bbe"
+dependencies = [
+ "keccak256",
 ]
 
 [[package]]
@@ -1892,14 +1911,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "parallel"
-version = "0.1.0"
-source = "git+https://github.com/leanEthereum/leanVM.git?rev=5e3ade21d339a45e1b3b0dba97ad9300ab50e49b#5e3ade21d339a45e1b3b0dba97ad9300ab50e49b"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "parity-scale-codec"
 version = "3.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1932,17 +1943,6 @@ name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
-
-[[package]]
-name = "pcs"
-version = "0.1.0"
-source = "git+https://github.com/leanEthereum/leanVM.git?rev=5e3ade21d339a45e1b3b0dba97ad9300ab50e49b#5e3ade21d339a45e1b3b0dba97ad9300ab50e49b"
-dependencies = [
- "fiat_shamir",
- "parallel",
- "primitives",
- "tracing",
-]
 
 [[package]]
 name = "pest"
@@ -2048,15 +2048,6 @@ dependencies = [
  "fixed-hash",
  "impl-codec",
  "uint",
-]
-
-[[package]]
-name = "primitives"
-version = "0.1.0"
-source = "git+https://github.com/leanEthereum/leanVM.git?rev=5e3ade21d339a45e1b3b0dba97ad9300ab50e49b#5e3ade21d339a45e1b3b0dba97ad9300ab50e49b"
-dependencies = [
- "parallel",
- "serde",
 ]
 
 [[package]]
@@ -2309,26 +2300,6 @@ checksum = "22e18b0f0062d30d4230b2e85ff77fdfe4326feb054b9783a3460d8435c8ab91"
 dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
-]
-
-[[package]]
-name = "rec_aggregation"
-version = "0.1.0"
-source = "git+https://github.com/leanEthereum/leanVM.git?rev=5e3ade21d339a45e1b3b0dba97ad9300ab50e49b#5e3ade21d339a45e1b3b0dba97ad9300ab50e49b"
-dependencies = [
- "bincode",
- "fiat_shamir",
- "keccak_gkr",
- "lean_compiler",
- "lean_da",
- "leanvm_core",
- "parallel",
- "pcs",
- "primitives",
- "serde",
- "signatures",
- "tracing",
- "verifier",
 ]
 
 [[package]]
@@ -2694,17 +2665,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "signatures"
-version = "0.1.0"
-source = "git+https://github.com/leanEthereum/leanVM.git?rev=5e3ade21d339a45e1b3b0dba97ad9300ab50e49b#5e3ade21d339a45e1b3b0dba97ad9300ab50e49b"
-dependencies = [
- "parallel",
- "primitives",
- "rand 0.9.5",
- "serde",
-]
-
-[[package]]
 name = "slab"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2724,6 +2684,62 @@ checksum = "d91ed6c858b01f942cd56b37a94b3e0a1798290327d1236e4d9cf4eaca44d29d"
 dependencies = [
  "base64ct",
  "der",
+]
+
+[[package]]
+name = "stable_keccak_gkr"
+version = "0.1.0"
+source = "git+https://github.com/leanEthereum/leanVM.git?rev=283686575c4e81790591d2c6e3ed21c69c0e3bbe#283686575c4e81790591d2c6e3ed21c69c0e3bbe"
+dependencies = [
+ "fiat_shamir_prover",
+ "stable_parallel",
+ "stable_pcs",
+ "stable_primitives",
+ "tracing",
+ "verifier",
+]
+
+[[package]]
+name = "stable_lean_vm_core"
+version = "0.1.0"
+source = "git+https://github.com/leanEthereum/leanVM.git?rev=283686575c4e81790591d2c6e3ed21c69c0e3bbe#283686575c4e81790591d2c6e3ed21c69c0e3bbe"
+dependencies = [
+ "fiat_shamir_prover",
+ "isa",
+ "stable_keccak_gkr",
+ "stable_parallel",
+ "stable_pcs",
+ "stable_primitives",
+ "tracing",
+ "verifier",
+]
+
+[[package]]
+name = "stable_parallel"
+version = "0.1.0"
+source = "git+https://github.com/leanEthereum/leanVM.git?rev=283686575c4e81790591d2c6e3ed21c69c0e3bbe#283686575c4e81790591d2c6e3ed21c69c0e3bbe"
+
+[[package]]
+name = "stable_pcs"
+version = "0.1.0"
+source = "git+https://github.com/leanEthereum/leanVM.git?rev=283686575c4e81790591d2c6e3ed21c69c0e3bbe#283686575c4e81790591d2c6e3ed21c69c0e3bbe"
+dependencies = [
+ "fiat_shamir_prover",
+ "stable_parallel",
+ "stable_primitives",
+ "tracing",
+ "verifier",
+]
+
+[[package]]
+name = "stable_primitives"
+version = "0.1.0"
+source = "git+https://github.com/leanEthereum/leanVM.git?rev=283686575c4e81790591d2c6e3ed21c69c0e3bbe#283686575c4e81790591d2c6e3ed21c69c0e3bbe"
+dependencies = [
+ "fiat_shamir_prover",
+ "isa",
+ "keccak256",
+ "stable_parallel",
 ]
 
 [[package]]
@@ -3008,7 +3024,7 @@ checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 [[package]]
 name = "verifier"
 version = "0.1.0"
-source = "git+https://github.com/leanEthereum/leanVM.git?rev=5e3ade21d339a45e1b3b0dba97ad9300ab50e49b#5e3ade21d339a45e1b3b0dba97ad9300ab50e49b"
+source = "git+https://github.com/leanEthereum/leanVM.git?rev=283686575c4e81790591d2c6e3ed21c69c0e3bbe#283686575c4e81790591d2c6e3ed21c69c0e3bbe"
 
 [[package]]
 name = "version_check"
@@ -3331,6 +3347,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "zkdsl_compiler"
+version = "0.1.0"
+source = "git+https://github.com/leanEthereum/leanVM.git?rev=283686575c4e81790591d2c6e3ed21c69c0e3bbe#283686575c4e81790591d2c6e3ed21c69c0e3bbe"
+dependencies = [
+ "isa",
+ "keccak256",
+ "verifier",
 ]
 
 [[package]]

@@ -6,7 +6,10 @@
 use std::{
     borrow::Cow,
     ffi::{OsStr, OsString},
+    num::NonZeroUsize,
+    ops::Range,
     path::{Path, PathBuf},
+    thread,
     time::Duration,
 };
 
@@ -21,13 +24,13 @@ pub const MAX_RECURSIVE_FAN_IN: usize = lean_pq::MAX_CHILDREN;
 pub const RECURSIVE_AGGREGATION_WORKLOAD: &str = "recursive_same_claim_aggregate";
 pub const KEY_CREATION_WORKLOAD: &str = "key_creation";
 pub const LIGHTHOUSE_REVISION: &str = "e423a66763bb1bd780492d635123f208d80c3538";
-/// The leaf indices every fixture signer's mock key is real over, a short range as in
-/// upstream's own benchmarks.
+/// The leaf indices fixture signers sign at, all in a key's first bottom tree, so a fixture
+/// key builds one bottom tree only.
 pub const FIXTURE_FIRST_LEAF: lean_pq::xmss::LeafIndex = 0;
 pub const FIXTURE_LAST_LEAF: lean_pq::xmss::LeafIndex = 15;
 
-/// Seed domains: a leanXMSS seed must back one key only, so mock fixture keys and full
-/// keys never share a seed.
+/// Seed domains: a leanXMSS seed must back one key only, so fixture keys and full keys
+/// never share a seed.
 const FIXTURE_SEED_DOMAIN: u8 = 1;
 const FULL_KEY_SEED_DOMAIN: u8 = 2;
 
@@ -36,32 +39,71 @@ pub fn deterministic_key_material(index: usize) -> Result<[u8; 32]> {
     indexed_bytes(index)
 }
 
-/// Returns the seed of full leanXMSS key `index`, which no fixture signer's mock key uses.
+/// Returns the seed of full leanXMSS key `index`, which no fixture signer's key uses.
 pub fn lean_full_key_seed(index: usize) -> Result<[u8; lean_pq::xmss::SEED_LEN]> {
     lean_seed(FULL_KEY_SEED_DOMAIN, 0, index)
 }
 
 /// Returns untimed fixture signer `index` signing message `message_index`.
 ///
-/// The key is upstream's mock leanXMSS key, real only over
-/// `FIXTURE_FIRST_LEAF..=FIXTURE_LAST_LEAF`, so its signature is a real leanXMSS signature
-/// at a fraction of a full key's generation cost. Each signer-and-message pair has its own
-/// seed, so one key only ever signs one message.
+/// The key is a real leanXMSS key derived from its own seed: each signer-and-message pair
+/// has one, so a key only ever signs one message. It signs at leaf index
+/// `FIXTURE_FIRST_LEAF + message_index % 16`, in its first bottom tree.
 pub fn lean_fixture_signer(index: usize, message_index: usize) -> Result<LeanXmssInput> {
-    use signatures::lean_xmss::mock;
-
     let message = indexed_bytes(message_index)?;
     let seed = lean_seed(FIXTURE_SEED_DOMAIN, message_index, index)?;
     let leaf_span = usize::try_from(FIXTURE_LAST_LEAF - FIXTURE_FIRST_LEAF + 1)?;
     let leaf_index =
         FIXTURE_FIRST_LEAF + lean_pq::xmss::LeafIndex::try_from(message_index % leaf_span)?;
-    let (key, public_key) = mock::key_gen_from_seed(seed, FIXTURE_FIRST_LEAF, FIXTURE_LAST_LEAF);
-    let signature = mock::sign(&key, &message, leaf_index)?;
-    Ok((
-        lean_pq::xmss::PublicKey::from_bytes(&public_key.to_bytes())?,
-        message,
-        lean_pq::xmss::Signature::from_bytes(&signature.to_bytes())?,
-    ))
+    let key = lean_pq::xmss::SecretKey::from_seed(seed);
+    let signature = key.sign(&message, leaf_index);
+    Ok((key.public_key(), message, signature))
+}
+
+/// Returns fixture signers `signers`, signer `index` signing message `message_index(index)`,
+/// in order.
+///
+/// Each real key builds its top tree and one bottom tree, `2^16` leaves each, before its
+/// first signature, so the signers are generated on every available core. The result does
+/// not depend on the core count.
+pub fn lean_fixture_signers(
+    signers: Range<usize>,
+    message_index: impl Fn(usize) -> usize + Sync,
+) -> Result<Vec<LeanXmssInput>> {
+    let count = signers.len();
+    let workers = thread::available_parallelism()
+        .map_or(1, NonZeroUsize::get)
+        .min(count)
+        .max(1);
+    // Contiguous chunks, joined in order, keep the signers in index order.
+    let chunk_len = count.div_ceil(workers).max(1);
+    let message_index = &message_index;
+    thread::scope(|scope| {
+        let workers = signers
+            .clone()
+            .step_by(chunk_len)
+            .map(|start| {
+                let chunk = start..(start + chunk_len).min(signers.end);
+                scope.spawn(move || {
+                    chunk
+                        .map(|index| {
+                            lean_fixture_signer(index, message_index(index)).with_context(|| {
+                                format!("failed to create XMSS fixture signer {index}")
+                            })
+                        })
+                        .collect::<Result<Vec<_>>>()
+                })
+            })
+            .collect::<Vec<_>>();
+        let mut inputs = Vec::with_capacity(count);
+        for worker in workers {
+            let chunk = worker
+                .join()
+                .unwrap_or_else(|panic| std::panic::resume_unwind(panic))?;
+            inputs.extend(chunk);
+        }
+        Ok(inputs)
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -962,9 +1004,9 @@ impl FixtureSet {
         let mut lean_signatures = Vec::with_capacity(count);
         let mut lean_public_keys = Vec::with_capacity(count);
 
-        for index in 0..count {
-            let (public_key, message, signature) = lean_fixture_signer(index, index % claim_count)
-                .with_context(|| format!("failed to create XMSS fixture signer {index}"))?;
+        for (public_key, message, signature) in
+            lean_fixture_signers(0..count, |index| index % claim_count)?
+        {
             lean_messages.push(message);
             lean_signatures.push(signature);
             lean_public_keys.push(public_key);

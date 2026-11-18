@@ -3,9 +3,7 @@
 use std::fmt;
 
 #[cfg(feature = "aggregation")]
-use leanvm::{AggregateVerifyError, AggregationError};
-use signatures::lean_sphincs::{LeanSphincsSignError, LeanSphincsVerifyError};
-use signatures::lean_xmss::{LeanXmssSignError, LeanXmssVerifyError};
+use lean_vm::AggregateError;
 
 use crate::xmss::LeafIndex;
 
@@ -28,58 +26,33 @@ pub enum Error {
         actual: usize,
     },
 
-    /// leanXMSS signing exhausted its randomizer trials without an admissible encoding.
-    #[error("leanXMSS signing at leaf index {leaf_index} failed: {reason}")]
-    XmssSign {
-        /// The leaf index the key was asked to sign or prepare at.
-        leaf_index: LeafIndex,
-        /// The upstream failure.
-        reason: LeanXmssSignError,
-    },
-
     /// A leanXMSS signature does not verify.
-    #[error("leanXMSS signature at leaf index {leaf_index} does not verify: {reason}")]
+    #[error("leanXMSS signature at leaf index {leaf_index} does not verify")]
     XmssVerify {
         /// The leaf index the signature claims.
         leaf_index: LeafIndex,
-        /// The verification step that rejected it.
-        reason: LeanXmssVerifyError,
-    },
-
-    /// leanSPHINCS signing exhausted its encoding-counter trials.
-    #[error("leanSPHINCS signing failed: {reason}")]
-    SphincsSign {
-        /// The upstream failure.
-        reason: LeanSphincsSignError,
     },
 
     /// A leanSPHINCS signature does not verify.
-    #[error("leanSPHINCS signature does not verify: {reason}")]
-    SphincsVerify {
-        /// The verification step that rejected it.
-        reason: LeanSphincsVerifyError,
-    },
+    #[error("leanSPHINCS signature does not verify")]
+    SphincsVerify,
 
     /// A raw leanXMSS signature handed to aggregation does not verify.
     #[cfg(feature = "aggregation")]
-    #[error("leanXMSS input {index} (leaf index {leaf_index}) does not verify: {reason}")]
+    #[error("leanXMSS input {index} (leaf index {leaf_index}) does not verify")]
     InvalidXmssInput {
         /// Position of the input in the leanXMSS list.
         index: usize,
         /// The leaf index the signature claims.
         leaf_index: LeafIndex,
-        /// The verification step that rejected it.
-        reason: LeanXmssVerifyError,
     },
 
     /// A raw leanSPHINCS signature handed to aggregation does not verify.
     #[cfg(feature = "aggregation")]
-    #[error("leanSPHINCS input {index} does not verify: {reason}")]
+    #[error("leanSPHINCS input {index} does not verify")]
     InvalidSphincsInput {
         /// Position of the input in the leanSPHINCS list.
         index: usize,
-        /// The verification step that rejected it.
-        reason: LeanSphincsVerifyError,
     },
 
     /// One aggregation was given more children than one proof can recurse over.
@@ -99,16 +72,19 @@ pub enum Error {
     #[cfg(feature = "aggregation")]
     Aggregation {
         /// The upstream failure.
-        reason: AggregationError,
+        reason: AggregateError,
     },
 
-    /// An encoded aggregate is malformed or its proof does not verify.
-    #[error("invalid aggregate: {reason}")]
+    /// Bytes handed to [`Aggregate::from_bytes`](crate::Aggregate::from_bytes) are not an
+    /// encoded leanVM aggregate proof.
+    #[error("malformed aggregate: the bytes are not a leanVM aggregate proof")]
     #[cfg(feature = "aggregation")]
-    InvalidAggregate {
-        /// The decoding or verification step that rejected it.
-        reason: AggregateVerifyError,
-    },
+    MalformedAggregate,
+
+    /// An aggregate proof does not prove the claims it was checked against.
+    #[error("the aggregate does not prove the given claims")]
+    #[cfg(feature = "aggregation")]
+    AggregateRejected,
 }
 
 /// A fixed-length byte encoding this crate decodes.

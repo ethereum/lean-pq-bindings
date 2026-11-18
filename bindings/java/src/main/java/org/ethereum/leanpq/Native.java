@@ -68,7 +68,7 @@ final class Native {
     private static final MethodHandle SPHINCS_VERIFY = downcall("lpq_sphincs_verify", VERIFY);
 
     private static final MethodHandle AGGREGATE_CREATE = downcall("lpq_aggregate_create", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, SIZE, ValueLayout.ADDRESS, SIZE, ValueLayout.ADDRESS, SIZE, ValueLayout.ADDRESS));
-    private static final MethodHandle AGGREGATE_FROM_BYTES = downcall("lpq_aggregate_from_bytes", BYTES_TO_HANDLE);
+    private static final MethodHandle AGGREGATE_FROM_BYTES = downcall("lpq_aggregate_from_bytes", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, SIZE, ValueLayout.ADDRESS, SIZE, ValueLayout.ADDRESS, SIZE, ValueLayout.ADDRESS));
     private static final MethodHandle AGGREGATE_TO_BYTES = downcall("lpq_aggregate_to_bytes", HANDLE_TO_BUFFER);
     private static final MethodHandle AGGREGATE_XMSS_CLAIMS = downcall("lpq_aggregate_xmss_claims", HANDLE_TO_BUFFER);
     private static final MethodHandle AGGREGATE_SPHINCS_CLAIMS = downcall("lpq_aggregate_sphincs_claims", HANDLE_TO_BUFFER);
@@ -174,9 +174,13 @@ final class Native {
         }
     }
 
-    static MemorySegment aggregateFromBytes(byte[] bytes) {
+    /** Claims are concatenated 64-byte {@code pk|msg} records. */
+    static MemorySegment aggregateFromBytes(byte[] bytes, byte[] xmssClaims, long xmssCount, byte[] sphincsClaims, long sphincsCount) {
         try (Arena arena = Arena.ofConfined()) {
-            return handle(AGGREGATE_FROM_BYTES, copy(arena, bytes), (long) bytes.length);
+            return handle(AGGREGATE_FROM_BYTES,
+                copy(arena, bytes), (long) bytes.length,
+                copy(arena, xmssClaims), xmssCount,
+                copy(arena, sphincsClaims), sphincsCount);
         }
     }
 

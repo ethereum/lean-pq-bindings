@@ -60,19 +60,45 @@ class LeanPqTest {
                      List.of(), List.of(), List.of(new SignedMessage(sphincsKey, second, sphincs.sign(second))));
                  Aggregate root = LeanPq.aggregate(
                      List.of(left, right), List.of(new SignedMessage(xmssKey, second, xmss.sign(second, 1))), List.of());
-                 Aggregate received = Aggregate.fromBytes(root.toBytes())) {
+                 Aggregate received = Aggregate.fromBytes(root.toBytes(), root.xmssClaims(), root.sphincsClaims())) {
                 List<SignatureClaim> xmssClaims = received.xmssClaims();
                 assertEquals(2, xmssClaims.size());
                 assertEquals(
                     Set.of(new SignatureClaim(xmssKey, first), new SignatureClaim(xmssKey, second)),
                     Set.copyOf(xmssClaims));
                 assertEquals(List.of(new SignatureClaim(sphincsKey, second)), received.sphincsClaims());
+                assertArrayEquals(root.toBytes(), received.toBytes());
 
-                byte[] tampered = root.toBytes();
+                byte[] proof = root.toBytes();
+                List<SignatureClaim> sphincsClaims = root.sphincsClaims();
+                // The receiver may list the claims in any order, and a repeated claim counts once.
+                List<SignatureClaim> reordered = List.of(xmssClaims.get(1), xmssClaims.get(0), xmssClaims.get(1));
+                try (Aggregate rebuilt = Aggregate.fromBytes(proof, reordered, sphincsClaims)) {
+                    assertEquals(xmssClaims, rebuilt.xmssClaims());
+                    assertEquals(sphincsClaims, rebuilt.sphincsClaims());
+                }
+
+                assertThrows(LeanPqException.class,
+                    () -> Aggregate.fromBytes(proof, List.of(xmssClaims.get(0)), sphincsClaims));
+                assertThrows(LeanPqException.class,
+                    () -> Aggregate.fromBytes(proof, xmssClaims, List.of()));
+                assertThrows(LeanPqException.class, () -> Aggregate.fromBytes(proof,
+                    List.of(new SignatureClaim(xmssKey, first), new SignatureClaim(xmssKey, bytes(0x33))), sphincsClaims));
+                assertThrows(LeanPqException.class, () -> Aggregate.fromBytes(proof, sphincsClaims, xmssClaims));
+
+                byte[] tampered = proof.clone();
                 tampered[tampered.length - 1] ^= 1;
-                assertThrows(LeanPqException.class, () -> Aggregate.fromBytes(tampered));
+                assertThrows(LeanPqException.class, () -> Aggregate.fromBytes(tampered, xmssClaims, sphincsClaims));
+                byte[] truncated = Arrays.copyOf(proof, proof.length - 1);
+                assertThrows(LeanPqException.class, () -> Aggregate.fromBytes(truncated, xmssClaims, sphincsClaims));
+                assertThrows(LeanPqException.class, () -> Aggregate.fromBytes(new byte[0], xmssClaims, sphincsClaims));
             }
         }
+    }
+
+    @Test
+    void rejectsAnEmptyAggregation() {
+        assertThrows(LeanPqException.class, () -> LeanPq.aggregate(List.of(), List.of(), List.of()));
     }
 
     private static byte[] bytes(int value) {

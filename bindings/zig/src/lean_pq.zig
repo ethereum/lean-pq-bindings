@@ -186,9 +186,7 @@ pub fn sphincsVerify(public_key: PublicKey, message: Message, signature: *const 
     try checkVerification(c.lpq_sphincs_verify(&public_key, public_key.len, &message, message.len, signature, signature.len));
 }
 
-/// A verified proof that each listed public key signed its message. An aggregate attests the
-/// claims it lists, not the claims you wanted: compare `xmssClaims` and `sphincsClaims` against
-/// what you expect.
+/// A verified proof that each listed public key signed its message.
 pub const Aggregate = struct {
     handle: *c.lpq_aggregate,
 
@@ -216,10 +214,21 @@ pub const Aggregate = struct {
         return .{ .handle = output orelse return error.InvalidNativeEncoding };
     }
 
-    /// Decodes and verifies an aggregate.
-    pub fn fromBytes(data: []const u8) Error!Aggregate {
+    /// Decodes a proof and verifies that it proves exactly `xmss_claims` and `sphincs_claims`.
+    /// The encoding is the proof alone: send the claims alongside it, or rebuild them on the
+    /// receiving side. Claims may come in any order; a repeated claim counts once. Fails with
+    /// `error.NativeFailure` for malformed bytes or any other claim set.
+    pub fn fromBytes(data: []const u8, xmss_claims: []const Claim, sphincs_claims: []const Claim) Error!Aggregate {
         var output: ?*c.lpq_aggregate = null;
-        try checkStatus(c.lpq_aggregate_from_bytes(bytesPtr(data), data.len, &output));
+        try checkStatus(c.lpq_aggregate_from_bytes(
+            bytesPtr(data),
+            data.len,
+            bytesPtr(std.mem.sliceAsBytes(xmss_claims)),
+            xmss_claims.len,
+            bytesPtr(std.mem.sliceAsBytes(sphincs_claims)),
+            sphincs_claims.len,
+            &output,
+        ));
         return .{ .handle = output orelse return error.InvalidNativeEncoding };
     }
 
@@ -228,6 +237,7 @@ pub const Aggregate = struct {
         self.* = undefined;
     }
 
+    /// The proof alone, without its claims. The caller owns the returned slice.
     pub fn toBytes(self: *const Aggregate, allocator: std.mem.Allocator) (Error || std.mem.Allocator.Error)![]u8 {
         var output: c.lpq_buffer = .{ .data = null, .len = 0 };
         try checkStatus(c.lpq_aggregate_to_bytes(self.handle, &output));
