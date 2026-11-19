@@ -12,7 +12,7 @@ archives built in, so `go get` needs no Rust toolchain:
 
 <!-- x-release-please-start-version -->
 ```sh
-go get github.com/ethereum/lean-pq-bindings/bindings/go@v0.11.0
+go get github.com/ethereum/lean-pq-bindings/bindings/go@v0.11.1
 ```
 <!-- x-release-please-end -->
 
