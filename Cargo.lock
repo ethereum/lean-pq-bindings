@@ -1111,6 +1111,64 @@ dependencies = [
 ]
 
 [[package]]
+name = "experimental_keccak_gkr"
+version = "0.1.0"
+source = "git+https://github.com/leanEthereum/leanVM.git?rev=283686575c4e81790591d2c6e3ed21c69c0e3bbe#283686575c4e81790591d2c6e3ed21c69c0e3bbe"
+dependencies = [
+ "experimental_parallel",
+ "experimental_pcs",
+ "experimental_primitives",
+ "fiat_shamir_prover",
+ "tracing",
+ "verifier",
+]
+
+[[package]]
+name = "experimental_lean_vm_core"
+version = "0.1.0"
+source = "git+https://github.com/leanEthereum/leanVM.git?rev=283686575c4e81790591d2c6e3ed21c69c0e3bbe#283686575c4e81790591d2c6e3ed21c69c0e3bbe"
+dependencies = [
+ "experimental_keccak_gkr",
+ "experimental_parallel",
+ "experimental_pcs",
+ "experimental_primitives",
+ "fiat_shamir_prover",
+ "isa",
+ "tracing",
+ "verifier",
+]
+
+[[package]]
+name = "experimental_parallel"
+version = "0.1.0"
+source = "git+https://github.com/leanEthereum/leanVM.git?rev=283686575c4e81790591d2c6e3ed21c69c0e3bbe#283686575c4e81790591d2c6e3ed21c69c0e3bbe"
+dependencies = [
+ "libc",
+]
+
+[[package]]
+name = "experimental_pcs"
+version = "0.1.0"
+source = "git+https://github.com/leanEthereum/leanVM.git?rev=283686575c4e81790591d2c6e3ed21c69c0e3bbe#283686575c4e81790591d2c6e3ed21c69c0e3bbe"
+dependencies = [
+ "experimental_parallel",
+ "experimental_primitives",
+ "fiat_shamir_prover",
+ "tracing",
+ "verifier",
+]
+
+[[package]]
+name = "experimental_primitives"
+version = "0.1.0"
+source = "git+https://github.com/leanEthereum/leanVM.git?rev=283686575c4e81790591d2c6e3ed21c69c0e3bbe#283686575c4e81790591d2c6e3ed21c69c0e3bbe"
+dependencies = [
+ "experimental_parallel",
+ "fiat_shamir_prover",
+ "keccak256",
+]
+
+[[package]]
 name = "fastrlp"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1729,6 +1787,7 @@ source = "git+https://github.com/leanEthereum/leanVM.git?rev=283686575c4e8179059
 dependencies = [
  "aggregation",
  "claims",
+ "experimental_lean_vm_core",
  "isa",
  "lean_da",
  "lean_sphincs",
